@@ -228,7 +228,6 @@ impl EvaluatorFactory {
                 _ => Err(DatabaseError::UnsupportedBinaryOperator(ty, op)),
             },
             LogicalType::SqlNull => Ok(BinaryEvaluatorBox(Arc::new(NullBinaryEvaluator))),
-            LogicalType::Invalid => Err(DatabaseError::InvalidType),
             LogicalType::Tuple(_) => match op {
                 BinaryOperator::Eq => Ok(BinaryEvaluatorBox(Arc::new(TupleEqBinaryEvaluator))),
                 BinaryOperator::NotEq => {

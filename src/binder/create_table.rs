@@ -113,7 +113,6 @@ impl<T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'_, '_, T, A>
         )?;
         let mut nullable = true;
 
-        // TODO: 这里可以对更多字段可设置内容进行补充
         for option_def in &column_def.options {
             match &option_def.option {
                 ColumnOption::Null => nullable = true,

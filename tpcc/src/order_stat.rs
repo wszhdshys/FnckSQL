@@ -45,7 +45,7 @@ impl<S: Storage> TpccTransaction<S> for OrderStat {
         args: &Self::Args,
         statements: &[Statement],
     ) -> Result<(), TpccError> {
-        let (c_balance, c_first, c_middle, c_last) = if args.by_name {
+        let (_c_balance, _c_first, _c_middle, _c_last) = if args.by_name {
             // SELECT count(c_id) FROM customer WHERE c_w_id = ? AND c_d_id = ? AND c_last = ?"
             let tuple = tx
                 .execute(
@@ -128,7 +128,7 @@ impl<S: Storage> TpccTransaction<S> for OrderStat {
         // let o_entry_d = tuple.values[1].datetime().unwrap();
         // let o_carrier_id = tuple.values[2].i32().unwrap();
         // "SELECT ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d FROM order_line WHERE ol_w_id = ? AND ol_d_id = ? AND ol_o_id = ?"
-        let tuple = tx
+        let _tuple = tx
             .execute(
                 &statements[4],
                 &[

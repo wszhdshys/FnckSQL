@@ -388,7 +388,6 @@ impl DataValue {
     #[inline]
     pub fn init(logic_type: &LogicalType) -> DataValue {
         match logic_type {
-            LogicalType::Invalid => panic!("invalid logical type"),
             LogicalType::SqlNull => DataValue::Null,
             LogicalType::Boolean => DataValue::Boolean(false),
             LogicalType::Tinyint => DataValue::Int8(0),
@@ -530,7 +529,6 @@ impl DataValue {
         is_projection: bool,
     ) -> Result<Option<Self>, DatabaseError> {
         let value = match ty {
-            LogicalType::Invalid => panic!("invalid logical type"),
             LogicalType::SqlNull => {
                 if !is_projection {
                     return Ok(None);
@@ -966,10 +964,7 @@ impl DataValue {
 
     pub fn cast(self, to: &LogicalType) -> Result<DataValue, DatabaseError> {
         let value = match self {
-            DataValue::Null => match to {
-                LogicalType::Invalid => Err(DatabaseError::CastFail),
-                _ => Ok(DataValue::Null),
-            },
+            DataValue::Null => Ok(DataValue::Null),
             DataValue::Boolean(value) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
                 LogicalType::Boolean => Ok(DataValue::Boolean(value)),
@@ -1244,7 +1239,6 @@ impl DataValue {
                 _ => Err(DatabaseError::CastFail),
             },
             DataValue::Utf8 { value, .. } => match to {
-                LogicalType::Invalid => Err(DatabaseError::CastFail),
                 LogicalType::SqlNull => Ok(DataValue::Null),
                 LogicalType::Boolean => Ok(DataValue::Boolean(bool::from_str(&value)?)),
                 LogicalType::Tinyint => Ok(DataValue::Int8(i8::from_str(&value)?)),

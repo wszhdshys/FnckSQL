@@ -342,8 +342,7 @@ impl Histogram {
                     _ => unreachable!(),
                 },
 
-                LogicalType::Invalid
-                | LogicalType::SqlNull
+                LogicalType::SqlNull
                 | LogicalType::Boolean
                 | LogicalType::Tinyint
                 | LogicalType::UTinyint

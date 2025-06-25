@@ -96,9 +96,6 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             }
             plan
         };
-        // Resolve scalar function call.
-        // TODO support SRF(Set-Returning Function).
-
         let mut select_list = self.normalize_select_item(&select.projection, &plan)?;
 
         if let Some(predicate) = &select.selection {
@@ -723,8 +720,6 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             }
         }
 
-        // TODO: validate limit and offset is correct use statistic.
-
         Ok(LimitOperator::build(offset, limit, children))
     }
 
@@ -805,7 +800,6 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                         evaluator: None,
                         ty: LogicalType::Boolean,
                     });
-                // TODO: handle cross join if on_keys is empty
                 Ok(JoinCondition::On {
                     on: on_keys,
                     filter: join_filter,

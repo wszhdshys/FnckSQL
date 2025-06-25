@@ -32,7 +32,6 @@ pub type ColumnId = Ulid;
     ReferenceSerialization,
 )]
 pub enum LogicalType {
-    Invalid,
     SqlNull,
     Boolean,
     Tinyint,
@@ -118,7 +117,7 @@ impl LogicalType {
             LogicalType::Date => Some(4),
             LogicalType::DateTime => Some(8),
             LogicalType::Time => Some(4),
-            LogicalType::Invalid | LogicalType::Tuple(_) => unreachable!(),
+            LogicalType::Tuple(_) => unreachable!(),
         }
     }
 
@@ -283,7 +282,6 @@ impl LogicalType {
             return true;
         }
         match from {
-            LogicalType::Invalid => false,
             LogicalType::SqlNull => true,
             LogicalType::Boolean => false,
             LogicalType::Tinyint => matches!(
@@ -464,7 +462,6 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
 impl std::fmt::Display for LogicalType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LogicalType::Invalid => write!(f, "Invalid")?,
             LogicalType::SqlNull => write!(f, "SqlNull")?,
             LogicalType::Boolean => write!(f, "Boolean")?,
             LogicalType::Tinyint => write!(f, "Tinyint")?,
@@ -534,7 +531,6 @@ pub(crate) mod test {
         let mut cursor = Cursor::new(Vec::new());
         let mut reference_tables = ReferenceTables::new();
 
-        fn_assert(&mut cursor, &mut reference_tables, LogicalType::Invalid)?;
         fn_assert(&mut cursor, &mut reference_tables, LogicalType::SqlNull)?;
         fn_assert(&mut cursor, &mut reference_tables, LogicalType::Boolean)?;
         fn_assert(&mut cursor, &mut reference_tables, LogicalType::Tinyint)?;

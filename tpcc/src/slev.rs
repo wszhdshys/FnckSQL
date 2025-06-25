@@ -57,7 +57,7 @@ impl<S: Storage> TpccTransaction<S> for Slev {
             .unwrap()?;
         let ol_i_id = tuple.values[0].i32().unwrap();
         // "SELECT count(*) FROM stock WHERE s_w_id = ? AND s_i_id = ? AND s_quantity < ?"
-        let tuple = tx
+        let _tuple = tx
             .execute(
                 &statements[2],
                 &[

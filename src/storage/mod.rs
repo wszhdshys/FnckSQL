@@ -996,18 +996,20 @@ pub struct TupleIter<'a, T: Transaction + 'a> {
 impl<'a, T: Transaction + 'a> Iter for TupleIter<'a, T> {
     fn next_tuple(&mut self) -> Result<Option<Tuple>, DatabaseError> {
         while self.offset > 0 {
-            let _ = self.iter.try_next()?;
-            self.offset -= 1;
-        }
-
-        if let Some(num) = self.limit {
-            if num == 0 {
+            if self.iter.try_next()?.is_none() {
                 return Ok(None);
             }
+            self.offset -= 1;
         }
 
         #[allow(clippy::never_loop)]
         while let Some((_, value)) = self.iter.try_next()? {
+            if let Some(limit) = self.limit.as_mut() {
+                if *limit == 0 {
+                    return Ok(None);
+                }
+                *limit -= 1;
+            }
             let tuple = TableCodec::decode_tuple(
                 &self.table_types,
                 self.pk_indices,
@@ -1015,10 +1017,6 @@ impl<'a, T: Transaction + 'a> Iter for TupleIter<'a, T> {
                 &self.tuple_columns,
                 &value,
             )?;
-
-            if let Some(num) = self.limit.as_mut() {
-                num.sub_assign(1);
-            }
 
             return Ok(Some(tuple));
         }

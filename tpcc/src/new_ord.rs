@@ -66,7 +66,7 @@ impl<S: Storage> TpccTransaction<S> for NewOrd {
         let mut amt = vec![Decimal::default(); MAX_NUM_ITEMS];
         let now = Utc::now().naive_utc();
 
-        let (c_discount, c_last, c_credit, w_tax) = if args.joins {
+        let (c_discount, _c_last, _c_credit, w_tax) = if args.joins {
             // "SELECT c_discount, c_last, c_credit, w_tax FROM customer, warehouse WHERE w_id = ? AND c_w_id = w_id AND c_d_id = ? AND c_id = ?"
             let tuple = tx
                 .execute(
