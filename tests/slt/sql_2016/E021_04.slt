@@ -5,8 +5,17 @@ SELECT CHARACTER_LENGTH ( 'foo' )
 ----
 3
 
-
 query I
 SELECT CHAR_LENGTH ( 'foo' )
 ----
 3
+
+query I
+SELECT CHARACTER_LENGTH ( '测试' )
+----
+2
+
+query I
+SELECT CHAR_LENGTH ( '测试' )
+----
+2
