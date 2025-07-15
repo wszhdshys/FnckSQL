@@ -16,6 +16,7 @@ use crate::types::value::DataValue;
 use crate::types::{ColumnId, LogicalType};
 use crate::utils::lru::SharedLruCache;
 use itertools::Itertools;
+use sqlparser::keywords::NULL;
 use std::collections::Bound;
 use std::io::Cursor;
 use std::mem;
@@ -464,6 +465,20 @@ pub trait Transaction: Sized {
         Ok(Some(view_cache.get_or_insert(view_name.clone(), |_| {
             TableCodec::decode_view(&bytes, (self, table_cache))
         })?))
+    }
+
+    fn views(&self, table_cache: &TableCache) -> Result<Vec<View>, DatabaseError> {
+        let mut metas = vec![];
+        let (min, max) = unsafe { &*self.table_codec() }.view_bound();
+        let mut iter = self.range(Bound::Included(min), Bound::Included(max))?;
+
+        while let Some((_, value)) = iter.try_next().ok().flatten() {
+            let meta = TableCodec::decode_view(&value, (self, table_cache))?;
+
+            metas.push(meta);
+        }
+
+        Ok(metas)
     }
 
     fn table<'a>(

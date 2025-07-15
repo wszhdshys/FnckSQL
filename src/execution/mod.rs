@@ -32,6 +32,7 @@ use crate::execution::dql::limit::Limit;
 use crate::execution::dql::projection::Projection;
 use crate::execution::dql::seq_scan::SeqScan;
 use crate::execution::dql::show_table::ShowTables;
+use crate::execution::dql::show_view::ShowViews;
 use crate::execution::dql::sort::Sort;
 use crate::execution::dql::union::Union;
 use crate::execution::dql::values::Values;
@@ -131,7 +132,8 @@ pub fn build_read<'a, T: Transaction + 'a>(
             Limit::from((op, input)).execute(cache, transaction)
         }
         Operator::Values(op) => Values::from(op).execute(cache, transaction),
-        Operator::Show => ShowTables.execute(cache, transaction),
+        Operator::ShowTable => ShowTables.execute(cache, transaction),
+        Operator::ShowView => ShowViews.execute(cache, transaction),
         Operator::Explain => {
             let input = childrens.pop_only();
 
