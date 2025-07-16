@@ -13,12 +13,13 @@ use sqlparser::ast::CharLengthUnits;
 use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct CharLength {
+pub(crate) struct OctetLength {
     summary: FunctionSummary,
 }
 
-impl CharLength {
-    pub(crate) fn new(function_name: String) -> Arc<Self> {
+impl OctetLength {
+    pub(crate) fn new() -> Arc<Self> {
+        let function_name = "octet_length".to_lowercase();
         let arg_types = vec![LogicalType::Varchar(None, CharLengthUnits::Characters)];
         Arc::new(Self {
             summary: FunctionSummary {
@@ -30,7 +31,7 @@ impl CharLength {
 }
 
 #[typetag::serde]
-impl ScalarFunctionImpl for CharLength {
+impl ScalarFunctionImpl for OctetLength {
     #[allow(unused_variables, clippy::redundant_closure_call)]
     fn eval(
         &self,
@@ -43,7 +44,7 @@ impl ScalarFunctionImpl for CharLength {
         }
         let mut length: u64 = 0;
         if let DataValue::Utf8 { value, ty, unit } = &mut value {
-            length = value.chars().count() as u64;
+            length = value.len() as u64;
         }
         Ok(DataValue::UInt64(length))
     }

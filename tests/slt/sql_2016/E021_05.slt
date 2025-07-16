@@ -1,8 +1,11 @@
-# E021-05: OCTET_LENGTH function
+#E021-05: OCTET_LENGTH function
 
-# TODO: OCTET_LENGTH()
+query I
+SELECT OCTET_LENGTH ( 'foo' )
+----
+3
 
-# query I
-# SELECT OCTET_LENGTH ( 'foo' )
-# ----
-# 3
+query I
+SELECT OCTET_LENGTH ( '测试' )
+----
+6
