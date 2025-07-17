@@ -406,6 +406,7 @@ impl TryFrom<sqlparser::ast::DataType> for LogicalType {
                 Ok(LogicalType::Varchar(None, CharLengthUnits::Characters))
             }
             sqlparser::ast::DataType::Float(_) => Ok(LogicalType::Float),
+            sqlparser::ast::DataType::Real => Ok(LogicalType::Float),
             sqlparser::ast::DataType::Double | sqlparser::ast::DataType::DoublePrecision => {
                 Ok(LogicalType::Double)
             }
