@@ -32,11 +32,11 @@ use crate::storage::Transaction;
 use crate::types::tuple::{Schema, SchemaRef};
 use crate::types::{ColumnId, LogicalType};
 use itertools::Itertools;
-use sqlparser::ast::{
-    Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select,
-    SelectInto, SelectItem, SetExpr, SetOperator, SetQuantifier, TableAlias, TableFactor,
-    TableWithJoins,
-};
+use sqlparser::ast::{CharLengthUnits, Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, Offset, OrderByExpr, Query, Select, SelectInto, SelectItem, SetExpr, SetOperator, SetQuantifier, TableAlias, TableFactor, TableWithJoins};
+use crate::expression::agg::AggKind;
+use crate::planner::operator::aggregate::AggregateOperator;
+use crate::types::LogicalType::Char;
+use crate::types::value::Utf8Type;
 
 impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, 'b, T, A> {
     pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan, DatabaseError> {
@@ -267,9 +267,9 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                 let mut tables = plan.referenced_table();
 
                 if let Some(TableAlias {
-                    name,
-                    columns: alias_column,
-                }) = alias
+                                name,
+                                columns: alias_column,
+                            }) = alias
                 {
                     if tables.len() > 1 {
                         return Err(DatabaseError::UnsupportedStmt(
@@ -291,9 +291,9 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                     let mut plan = FunctionScanOperator::build(function);
 
                     if let Some(TableAlias {
-                        name,
-                        columns: alias_column,
-                    }) = alias
+                                    name,
+                                    columns: alias_column,
+                                }) = alias
                     {
                         table_alias = Some(Arc::new(name.value.to_lowercase()));
 
@@ -599,6 +599,48 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
 
                 let (mut plan, join_ty) = match sub_query {
                     SubQueryType::SubQuery(plan) => (plan, JoinType::Inner),
+                    SubQueryType::ExistsSubQuery(is_not, plan) => {
+                        let limit = LimitOperator::build(
+                            None,
+                            Some(1),
+                            plan,
+                        );
+                        let mut agg = AggregateOperator::build(
+                            limit,
+                            vec![ScalarExpression::AggCall {
+                                distinct: false,
+                                kind: AggKind::Count,
+                                args: vec![ScalarExpression::Constant(DataValue::Utf8{
+                                    value: "*".to_string(),
+                                    ty: Utf8Type::Fixed(1),
+                                    unit: CharLengthUnits::Characters,
+                                })],
+                                ty: LogicalType::Integer,
+                            }],
+                            vec![],
+                            false,
+                        );
+                        let filter = FilterOperator::build(ScalarExpression::Binary {
+                            op: if is_not { BinaryOperator::NotEq } else { BinaryOperator::Eq },
+                            left_expr: Box::new(ScalarExpression::ColumnRef(agg.output_schema()[0].clone())),
+                            right_expr: Box::new(ScalarExpression::Constant(DataValue::Int32(1))),
+                            evaluator: None,
+                            ty: LogicalType::Boolean,
+                        },
+                        agg,
+                        false);
+                        let projection = ProjectOperator {
+                            exprs: vec![ScalarExpression::Constant(DataValue::Int32(1))]
+                        };
+                        let plan = LogicalPlan::new(Operator::Project(projection), Childrens::Only(filter));
+                        children = LJoinOperator::build(
+                            children,
+                            plan,
+                            JoinCondition::None,
+                            JoinType::Cross,
+                        );
+                        continue;
+                    }
                     SubQueryType::InSubQuery(is_not, plan) => {
                         let join_ty = if is_not {
                             JoinType::LeftAnti

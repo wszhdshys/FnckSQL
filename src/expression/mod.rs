@@ -479,8 +479,15 @@ impl ScalarExpression {
                 right_expr,
                 ..
             } => left_expr.has_count_star() || right_expr.has_count_star(),
-            ScalarExpression::AggCall { args, .. }
-            | ScalarExpression::ScalaFunction(ScalarFunction { args, .. })
+            ScalarExpression::AggCall { args, .. } => {
+                if args.len() == 1 {
+                    if let ScalarExpression::Constant(value) = &args[0] {
+                        return matches!(value.utf8(), Some("*"));
+                    }
+                }
+                args.iter().any(Self::has_count_star)
+            }
+            ScalarExpression::ScalaFunction(ScalarFunction { args, .. })
             | ScalarExpression::Coalesce { exprs: args, .. } => {
                 args.iter().any(Self::has_count_star)
             }
