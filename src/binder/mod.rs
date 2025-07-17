@@ -85,6 +85,7 @@ pub enum QueryBindStep {
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum SubQueryType {
     SubQuery(LogicalPlan),
+    ExistsSubQuery(bool, LogicalPlan),
     InSubQuery(bool, LogicalPlan),
 }
 
