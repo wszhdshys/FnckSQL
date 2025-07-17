@@ -142,14 +142,15 @@ impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T
                     trim_where: *trim_where,
                 })
             }
-            Expr::Exists {subquery, negated} => {
+            Expr::Exists { subquery, negated } => {
                 let (sub_query, column) = self.bind_subquery(subquery)?;
                 let (_, sub_query) = if !self.context.is_step(&QueryBindStep::Where) {
                     self.bind_temp_table(column, sub_query)?
                 } else {
                     (ScalarExpression::ColumnRef(column), sub_query)
                 };
-                self.context.sub_query(SubQueryType::ExistsSubQuery(*negated, sub_query));
+                self.context
+                    .sub_query(SubQueryType::ExistsSubQuery(*negated, sub_query));
                 Ok(ScalarExpression::Constant(DataValue::Boolean(true)))
             }
             Expr::Subquery(subquery) => {
