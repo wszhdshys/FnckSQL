@@ -4,7 +4,7 @@ use crate::storage::table_codec::{BumpBytes, BOUND_MAX_TAG, BOUND_MIN_TAG};
 use crate::types::LogicalType::{Date, TimeStamp};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use chrono::format::{DelayedFormat, StrftimeItems};
-use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
@@ -34,6 +34,9 @@ pub const TIME_FMT: &str = "%H:%M:%S";
 pub const TIME_FMT_WITHOUT_ZONE: &str = "%H:%M:%S%.f";
 pub const TIME_FMT_WITH_ZONE: &str = "%H:%M:%S%.f%z";
 pub const TIME_FMT_WITHOUT_PRECISION: &str = "%H:%M:%S%z";
+
+pub const ONE_SEC_TO_NANO: u32 = 1_000_000_000;
+pub const ONE_DAY_TO_SEC: u32 = 86_400;
 
 const ENCODE_GROUP_SIZE: usize = 8;
 const ENCODE_MARKER: u8 = 0xFF;
@@ -67,7 +70,7 @@ pub enum DataValue {
     Date32(i32),
     /// Date stored as a signed 64bit int timestamp since UNIX epoch 1970-01-01
     Date64(i64),
-    Time(u32, u64, bool),
+    Time32(u32, u64, bool),
     Time64(i64, u64, bool),
     Decimal(Decimal),
     /// (values, is_upper)
@@ -142,8 +145,8 @@ impl PartialEq for DataValue {
             (Date32(_), _) => false,
             (Date64(v1), Date64(v2)) => v1.eq(v2),
             (Date64(_), _) => false,
-            (Time(v1, ..), Time(v2, ..)) => v1.eq(v2),
-            (Time(..), _) => false,
+            (Time32(v1, ..), Time32(v2, ..)) => v1.eq(v2),
+            (Time32(..), _) => false,
             (Time64(v1, ..), Time64(v2, ..)) => v1.eq(v2),
             (Time64(..), _) => false,
             (Decimal(v1), Decimal(v2)) => v1.eq(v2),
@@ -190,8 +193,8 @@ impl PartialOrd for DataValue {
             (Date32(_), _) => None,
             (Date64(v1), Date64(v2)) => v1.partial_cmp(v2),
             (Date64(_), _) => None,
-            (Time(v1, ..), Time(v2, ..)) => v1.partial_cmp(v2),
-            (Time(..), _) => None,
+            (Time32(v1, ..), Time32(v2, ..)) => v1.partial_cmp(v2),
+            (Time32(..), _) => None,
             (Time64(v1, ..), Time64(v2, ..)) => v1.partial_cmp(v2),
             (Time64(..), _) => None,
             (Decimal(v1), Decimal(v2)) => v1.partial_cmp(v2),
@@ -228,7 +231,7 @@ impl Hash for DataValue {
             Null => 1.hash(state),
             Date32(v) => v.hash(state),
             Date64(v) => v.hash(state),
-            Time(v, ..) => v.hash(state),
+            Time32(v, ..) => v.hash(state),
             Time64(v, ..) => v.hash(state),
             Decimal(v) => v.hash(state),
             Tuple(values, is_upper) => {
@@ -306,7 +309,7 @@ impl DataValue {
     }
 
     pub fn time(&self) -> Option<NaiveTime> {
-        if let DataValue::Time(val, ..) = self {
+        if let DataValue::Time32(val, ..) = self {
             NaiveTime::from_num_seconds_from_midnight_opt(*val, 0)
         } else {
             None
@@ -382,8 +385,8 @@ impl DataValue {
     }
 
     pub fn pack(a: u32, b: u32, precision: u64) -> u32 {
-        assert!(b <= 1_000_000_000);
-        assert!(a <= 86_400);
+        assert!(b <= ONE_SEC_TO_NANO);
+        assert!(a <= ONE_DAY_TO_SEC);
         // Scale down `a` to fit
         let scaled_b = b / (1000000000 / 10_u32.pow(precision as u32)); // Now 0-1_000_000
         let p = match precision {
@@ -458,8 +461,8 @@ impl DataValue {
             LogicalType::Date => DataValue::Date32(UNIX_DATETIME.num_days_from_ce()),
             LogicalType::DateTime => DataValue::Date64(UNIX_DATETIME.and_utc().timestamp()),
             LogicalType::Time(precision, zone) => match precision {
-                Some(i) => DataValue::Time(UNIX_TIME.num_seconds_from_midnight(), *i, *zone),
-                None => DataValue::Time(UNIX_TIME.num_seconds_from_midnight(), 0, *zone),
+                Some(i) => DataValue::Time32(UNIX_TIME.num_seconds_from_midnight(), *i, *zone),
+                None => DataValue::Time32(UNIX_TIME.num_seconds_from_midnight(), 0, *zone),
             },
             TimeStamp(precision, zone) => match precision {
                 Some(3) => DataValue::Time64(UNIX_DATETIME.and_utc().timestamp_millis(), 3, *zone),
@@ -570,7 +573,7 @@ impl DataValue {
                 writer.write_i64::<LittleEndian>(*v)?;
                 return Ok(());
             }
-            DataValue::Time(v, ..) => {
+            DataValue::Time32(v, ..) => {
                 writer.write_u32::<LittleEndian>(*v)?;
                 return Ok(());
             }
@@ -739,7 +742,7 @@ impl DataValue {
                     reader.seek(SeekFrom::Current(4))?;
                     return Ok(None);
                 }
-                DataValue::Time(reader.read_u32::<LittleEndian>()?, precision, *zone)
+                DataValue::Time32(reader.read_u32::<LittleEndian>()?, precision, *zone)
             }
             TimeStamp(precision, zone) => {
                 let precision = match precision {
@@ -794,7 +797,7 @@ impl DataValue {
             } => LogicalType::Char(*len, *unit),
             DataValue::Date32(_) => LogicalType::Date,
             DataValue::Date64(_) => LogicalType::DateTime,
-            DataValue::Time(..) => LogicalType::Time(None, false),
+            DataValue::Time32(..) => LogicalType::Time(None, false),
             DataValue::Time64(..) => TimeStamp(None, false),
             DataValue::Decimal(_) => LogicalType::Decimal(None, None),
             DataValue::Tuple(values, ..) => {
@@ -867,7 +870,7 @@ impl DataValue {
             }
             DataValue::UInt8(v) => encode_u!(b, v),
             DataValue::UInt16(v) => encode_u!(b, v),
-            DataValue::UInt32(v) | DataValue::Time(v, ..) => encode_u!(b, v),
+            DataValue::UInt32(v) | DataValue::Time32(v, ..) => encode_u!(b, v),
             DataValue::UInt64(v) => encode_u!(b, v),
             DataValue::Utf8 { value: v, .. } => Self::encode_bytes(b, v.as_bytes()),
             DataValue::Boolean(v) => b.push(if *v { b'1' } else { b'0' }),
@@ -1381,7 +1384,7 @@ impl DataValue {
                         _ => NaiveTime::parse_from_str(&complete_value, fmt)
                             .map(|time| (time.num_seconds_from_midnight(), time.nanosecond()))?,
                     };
-                    Ok(DataValue::Time(
+                    Ok(DataValue::Time32(
                         Self::pack(value, nano, precision),
                         precision,
                         *zone,
@@ -1503,7 +1506,7 @@ impl DataValue {
                         .map(|date_time| date_time.time().num_seconds_from_midnight())
                         .ok_or(DatabaseError::CastFail)?;
 
-                    Ok(DataValue::Time(Self::pack(value, 0, 0), precision, *zone))
+                    Ok(DataValue::Time32(Self::pack(value, 0, 0), precision, *zone))
                 }
                 TimeStamp(precision, zone) => {
                     let precision = match precision {
@@ -1514,7 +1517,7 @@ impl DataValue {
                 }
                 _ => Err(DatabaseError::CastFail),
             },
-            DataValue::Time(value, precision, _) => match to {
+            DataValue::Time32(value, precision, _) => match to {
                 LogicalType::SqlNull => Ok(DataValue::Null),
                 LogicalType::Char(len, unit) => {
                     varchar_cast!(
@@ -1553,38 +1556,18 @@ impl DataValue {
                     )
                 }
                 Date => {
-                    let value = match precision {
-                        0 => DateTime::from_timestamp(value, 0),
-                        3 => DateTime::from_timestamp_millis(value),
-                        6 => DateTime::from_timestamp_micros(value),
-                        9 => {
-                            let secs = value.div_euclid(1_000_000_000);
-                            let nsecs = value.rem_euclid(1_000_000_000) as u32;
-                            DateTime::from_timestamp(secs, nsecs)
-                        }
-                        _ => unreachable!(),
-                    }
-                    .ok_or(DatabaseError::CastFail)?
-                    .naive_utc()
-                    .date()
-                    .num_days_from_ce();
+                    let value = Self::from_timestamp_precision(value, precision)
+                        .ok_or(DatabaseError::CastFail)?
+                        .naive_utc()
+                        .date()
+                        .num_days_from_ce();
 
                     Ok(DataValue::Date32(value))
                 }
                 LogicalType::DateTime => {
-                    let value = match precision {
-                        0 => DateTime::from_timestamp(value, 0),
-                        3 => DateTime::from_timestamp_millis(value),
-                        6 => DateTime::from_timestamp_micros(value),
-                        9 => {
-                            let secs = value.div_euclid(1_000_000_000);
-                            let nsecs = value.rem_euclid(1_000_000_000) as u32;
-                            DateTime::from_timestamp(secs, nsecs)
-                        }
-                        _ => unreachable!(),
-                    }
-                    .ok_or(DatabaseError::CastFail)?
-                    .timestamp();
+                    let value = Self::from_timestamp_precision(value, precision)
+                        .ok_or(DatabaseError::CastFail)?
+                        .timestamp();
                     Ok(DataValue::Date64(value))
                 }
                 LogicalType::Time(p, zone) => {
@@ -1592,25 +1575,15 @@ impl DataValue {
                         Some(p) => *p,
                         None => 0,
                     };
-                    let (value, nano) = match precision {
-                        0 => DateTime::from_timestamp(value, 0),
-                        3 => DateTime::from_timestamp_millis(value),
-                        6 => DateTime::from_timestamp_micros(value),
-                        9 => {
-                            let secs = value.div_euclid(1_000_000_000);
-                            let nsecs = value.rem_euclid(1_000_000_000) as u32;
-                            DateTime::from_timestamp(secs, nsecs)
-                        }
-                        _ => unreachable!(),
-                    }
-                    .map(|date_time| {
-                        (
-                            date_time.time().num_seconds_from_midnight(),
-                            date_time.time().nanosecond(),
-                        )
-                    })
-                    .ok_or(DatabaseError::CastFail)?;
-                    Ok(DataValue::Time(Self::pack(value, nano, p), p, *zone))
+                    let (value, nano) = Self::from_timestamp_precision(value, precision)
+                        .map(|date_time| {
+                            (
+                                date_time.time().num_seconds_from_midnight(),
+                                date_time.time().nanosecond(),
+                            )
+                        })
+                        .ok_or(DatabaseError::CastFail)?;
+                    Ok(DataValue::Time32(Self::pack(value, nano, p), p, *zone))
                 }
                 TimeStamp(precision, zone) => {
                     let precision = match precision {
@@ -1731,25 +1704,42 @@ impl DataValue {
         precision: u64,
         _zone: bool,
     ) -> Option<DelayedFormat<StrftimeItems<'a>>> {
-        match precision {
-            0 => DateTime::from_timestamp(v, 0)
-                .map(|date_time| date_time.format(TIME_STAMP_FMT_WITHOUT_ZONE)),
-            3 => DateTime::from_timestamp_millis(v)
-                .map(|date_time| date_time.format(TIME_STAMP_FMT_WITHOUT_ZONE)),
-            6 => DateTime::from_timestamp_micros(v)
-                .map(|date_time| date_time.format(TIME_STAMP_FMT_WITHOUT_ZONE)),
-            9 => {
-                let secs = v.div_euclid(1_000_000_000);
-                let nsecs = v.rem_euclid(1_000_000_000) as u32;
-                DateTime::from_timestamp(secs, nsecs)
-                    .map(|date_time| date_time.format(TIME_STAMP_FMT_WITHOUT_ZONE))
-            }
-            _ => unreachable!(),
-        }
+        Self::from_timestamp_precision(v, precision)
+            .map(|date_time| date_time.format(TIME_STAMP_FMT_WITHOUT_ZONE))
     }
 
     fn decimal_format(v: &Decimal) -> String {
         v.to_string()
+    }
+
+    pub fn timestamp_precision(v: DateTime<Utc>, precision: u64) -> i64 {
+        match precision {
+            3 => v.timestamp_millis(),
+            6 => v.timestamp_micros(),
+            9 => {
+                if let Some(value) = v.timestamp_nanos_opt() {
+                    value
+                } else {
+                    0
+                }
+            }
+            0 => v.timestamp(),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn from_timestamp_precision(v: i64, precision: u64) -> Option<DateTime<chrono::Utc>> {
+        match precision {
+            0 => DateTime::from_timestamp(v, 0),
+            3 => DateTime::from_timestamp_millis(v),
+            6 => DateTime::from_timestamp_micros(v),
+            9 => {
+                let secs = v.div_euclid(ONE_SEC_TO_NANO as i64);
+                let nsecs = v.rem_euclid(ONE_SEC_TO_NANO as i64) as u32;
+                DateTime::from_timestamp(secs, nsecs)
+            }
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -1874,7 +1864,7 @@ impl From<Option<&NaiveDateTime>> for DataValue {
 
 impl From<&NaiveTime> for DataValue {
     fn from(value: &NaiveTime) -> Self {
-        DataValue::Time(
+        DataValue::Time32(
             Self::pack(value.num_seconds_from_midnight(), value.nanosecond(), 4),
             6,
             false,
@@ -1885,7 +1875,7 @@ impl From<&NaiveTime> for DataValue {
 impl From<Option<&NaiveTime>> for DataValue {
     fn from(value: Option<&NaiveTime>) -> Self {
         if let Some(value) = value {
-            DataValue::Time(
+            DataValue::Time32(
                 Self::pack(value.num_seconds_from_midnight(), value.nanosecond(), 4),
                 0,
                 false,
@@ -1955,7 +1945,7 @@ impl fmt::Display for DataValue {
             DataValue::Null => write!(f, "null")?,
             DataValue::Date32(e) => write!(f, "{}", DataValue::date_format(*e).unwrap())?,
             DataValue::Date64(e) => write!(f, "{}", DataValue::date_time_format(*e).unwrap())?,
-            DataValue::Time(e, precision, zone) => write!(
+            DataValue::Time32(e, precision, zone) => write!(
                 f,
                 "{}",
                 DataValue::time_format(*e, *precision, *zone).unwrap()
@@ -2001,7 +1991,7 @@ impl fmt::Debug for DataValue {
             DataValue::Null => write!(f, "null"),
             DataValue::Date32(_) => write!(f, "Date32({})", self),
             DataValue::Date64(_) => write!(f, "Date64({})", self),
-            DataValue::Time(..) => write!(f, "Time({})", self),
+            DataValue::Time32(..) => write!(f, "Time({})", self),
             DataValue::Time64(..) => write!(f, "Time64({})", self),
             DataValue::Decimal(_) => write!(f, "Decimal({})", self),
             DataValue::Tuple(..) => {

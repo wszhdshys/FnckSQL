@@ -9,7 +9,7 @@ pub mod int32;
 pub mod int64;
 pub mod int8;
 pub mod null;
-pub mod time;
+pub mod time32;
 pub mod time64;
 pub mod tuple;
 pub mod uint16;
@@ -31,7 +31,7 @@ use crate::types::evaluator::int32::*;
 use crate::types::evaluator::int64::*;
 use crate::types::evaluator::int8::*;
 use crate::types::evaluator::null::NullBinaryEvaluator;
-use crate::types::evaluator::time::*;
+use crate::types::evaluator::time32::*;
 use crate::types::evaluator::time64::*;
 use crate::types::evaluator::tuple::{
     TupleEqBinaryEvaluator, TupleGtBinaryEvaluator, TupleGtEqBinaryEvaluator,
@@ -205,10 +205,6 @@ impl EvaluatorFactory {
                 _ => Err(DatabaseError::UnsupportedBinaryOperator(ty, op)),
             },
             LogicalType::TimeStamp(_, _) => match op {
-                BinaryOperator::Plus => Ok(BinaryEvaluatorBox(Arc::new(Time64PlusBinaryEvaluator))),
-                BinaryOperator::Minus => {
-                    Ok(BinaryEvaluatorBox(Arc::new(Time64MinusBinaryEvaluator)))
-                }
                 BinaryOperator::Gt => Ok(BinaryEvaluatorBox(Arc::new(Time64GtBinaryEvaluator))),
                 BinaryOperator::GtEq => Ok(BinaryEvaluatorBox(Arc::new(Time64GtEqBinaryEvaluator))),
                 BinaryOperator::Lt => Ok(BinaryEvaluatorBox(Arc::new(Time64LtBinaryEvaluator))),
@@ -1054,6 +1050,164 @@ mod test {
                 },
             ),
             DataValue::Null
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_binary_op_time32_and_time64() -> Result<(), DatabaseError> {
+        let evaluator_time32 =
+            EvaluatorFactory::binary_create(LogicalType::Time(None, false), BinaryOperator::Plus)?;
+        assert_eq!(
+            evaluator_time32.0.binary_eval(
+                &DataValue::Time32(4190119896, 3, false),
+                &DataValue::Time32(2621204256, 4, false),
+            ),
+            DataValue::Time32(2618593017, 4, false)
+        );
+        assert_eq!(
+            evaluator_time32.0.binary_eval(
+                &DataValue::Time32(4190175696, 3, false),
+                &DataValue::Time32(2621224256, 4, false),
+            ),
+            DataValue::Null
+        );
+
+        let evaluator_time32 =
+            EvaluatorFactory::binary_create(LogicalType::Time(None, false), BinaryOperator::Minus)?;
+        assert_eq!(
+            evaluator_time32.0.binary_eval(
+                &DataValue::Time32(4190119896, 3, false),
+                &DataValue::Time32(2621204256, 4, false),
+            ),
+            DataValue::Null
+        );
+        assert_eq!(
+            evaluator_time32.0.binary_eval(
+                &DataValue::Time32(2621204256, 4, false),
+                &DataValue::Time32(4190119896, 3, false),
+            ),
+            DataValue::Time32(2375496, 4, false)
+        );
+
+        let evaluator_time32 =
+            EvaluatorFactory::binary_create(LogicalType::Time(None, false), BinaryOperator::Gt)?;
+        let evaluator_time64 = EvaluatorFactory::binary_create(
+            LogicalType::TimeStamp(None, false),
+            BinaryOperator::Gt,
+        )?;
+        assert_eq!(
+            evaluator_time32.0.binary_eval(
+                &DataValue::Time32(2621204256, 4, false),
+                &DataValue::Time32(4190119896, 3, false),
+            ),
+            DataValue::Boolean(true)
+        );
+        assert_eq!(
+            evaluator_time32.0.binary_eval(
+                &DataValue::Time32(4190119896, 3, false),
+                &DataValue::Time32(2621204256, 4, false),
+            ),
+            DataValue::Boolean(false)
+        );
+        assert_eq!(
+            evaluator_time64.0.binary_eval(
+                &DataValue::Time64(1736055775154814, 6, false),
+                &DataValue::Time64(1738734177256, 3, false),
+            ),
+            DataValue::Boolean(false)
+        );
+        assert_eq!(
+            evaluator_time64.0.binary_eval(
+                &DataValue::Time64(1738734177256, 3, false),
+                &DataValue::Time64(1736055775154814, 6, false),
+            ),
+            DataValue::Boolean(true)
+        );
+
+        let evaluator_time32 =
+            EvaluatorFactory::binary_create(LogicalType::Time(None, false), BinaryOperator::GtEq)?;
+        let evaluator_time64 = EvaluatorFactory::binary_create(
+            LogicalType::TimeStamp(None, false),
+            BinaryOperator::GtEq,
+        )?;
+        assert_eq!(
+            evaluator_time32.0.binary_eval(
+                &DataValue::Time32(2621204256, 4, false),
+                &DataValue::Time32(4190119896, 3, false),
+            ),
+            DataValue::Boolean(true)
+        );
+        assert_eq!(
+            evaluator_time32.0.binary_eval(
+                &DataValue::Time32(4190119896, 3, false),
+                &DataValue::Time32(2621204256, 4, false),
+            ),
+            DataValue::Boolean(false)
+        );
+        assert_eq!(
+            evaluator_time32.0.binary_eval(
+                &DataValue::Time32(4190119896, 3, false),
+                &DataValue::Time32(2618828760, 4, false),
+            ),
+            DataValue::Boolean(true)
+        );
+        assert_eq!(
+            evaluator_time64.0.binary_eval(
+                &DataValue::Time64(1736055775154814, 6, false),
+                &DataValue::Time64(1738734177256, 3, false),
+            ),
+            DataValue::Boolean(false)
+        );
+        assert_eq!(
+            evaluator_time64.0.binary_eval(
+                &DataValue::Time64(1738734177256, 3, false),
+                &DataValue::Time64(1736055775154814, 6, false),
+            ),
+            DataValue::Boolean(true)
+        );
+        assert_eq!(
+            evaluator_time64.0.binary_eval(
+                &DataValue::Time64(1738734177256, 3, false),
+                &DataValue::Time64(1738734177256000, 6, false),
+            ),
+            DataValue::Boolean(true)
+        );
+
+        let evaluator_time32 =
+            EvaluatorFactory::binary_create(LogicalType::Time(None, false), BinaryOperator::Eq)?;
+        let evaluator_time64 = EvaluatorFactory::binary_create(
+            LogicalType::TimeStamp(None, false),
+            BinaryOperator::Eq,
+        )?;
+        assert_eq!(
+            evaluator_time32.0.binary_eval(
+                &DataValue::Time32(4190119896, 3, false),
+                &DataValue::Time32(2621204256, 4, false),
+            ),
+            DataValue::Boolean(false)
+        );
+        assert_eq!(
+            evaluator_time32.0.binary_eval(
+                &DataValue::Time32(4190119896, 3, false),
+                &DataValue::Time32(2618828760, 4, false),
+            ),
+            DataValue::Boolean(true)
+        );
+        assert_eq!(
+            evaluator_time64.0.binary_eval(
+                &DataValue::Time64(1738734177256, 3, false),
+                &DataValue::Time64(1736055775154814, 6, false),
+            ),
+            DataValue::Boolean(false)
+        );
+        assert_eq!(
+            evaluator_time64.0.binary_eval(
+                &DataValue::Time64(1738734177256, 3, false),
+                &DataValue::Time64(1738734177256000, 6, false),
+            ),
+            DataValue::Boolean(true)
         );
 
         Ok(())

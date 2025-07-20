@@ -339,7 +339,7 @@ impl Histogram {
                     DataValue::Date64(value) => DataValue::Int64(*value)
                         .cast(&LogicalType::Double)?
                         .double(),
-                    DataValue::Time(value, ..) => DataValue::UInt32(*value)
+                    DataValue::Time32(value, ..) => DataValue::UInt32(*value)
                         .cast(&LogicalType::Double)?
                         .double(),
                     DataValue::Time64(value, ..) => DataValue::Int64(*value)
