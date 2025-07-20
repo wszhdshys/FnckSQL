@@ -1991,7 +1991,7 @@ impl fmt::Debug for DataValue {
             DataValue::Null => write!(f, "null"),
             DataValue::Date32(_) => write!(f, "Date32({})", self),
             DataValue::Date64(_) => write!(f, "Date64({})", self),
-            DataValue::Time32(..) => write!(f, "Time({})", self),
+            DataValue::Time32(..) => write!(f, "Time32({})", self),
             DataValue::Time64(..) => write!(f, "Time64({})", self),
             DataValue::Decimal(_) => write!(f, "Decimal({})", self),
             DataValue::Tuple(..) => {
