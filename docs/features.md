@@ -133,6 +133,7 @@ let kite_sql = DataBaseBuilder::path("./data")
   - Right
   - Full
   - Cross (Natural\Using)
+- [x] Exists
 - [x] Group By
 - [x] Having
 - [x] Order By
@@ -170,4 +171,5 @@ let kite_sql = DataBaseBuilder::path("./data")
 - Date
 - DateTime
 - Time
+- TimeStamp
 - Tuple
