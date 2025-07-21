@@ -150,7 +150,7 @@ impl<S: Storage> State<S> {
                 scala_functions,
                 table_functions,
                 Arc::new(AtomicUsize::new(0)),
-                vec![],    
+                vec![],
             ),
             &params,
             None,

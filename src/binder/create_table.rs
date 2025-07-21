@@ -189,7 +189,7 @@ mod tests {
                 &scala_functions,
                 &table_functions,
                 Arc::new(AtomicUsize::new(0)),
-                vec![]
+                vec![],
             ),
             &[],
             None,

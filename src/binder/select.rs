@@ -35,7 +35,11 @@ use crate::types::tuple::{Schema, SchemaRef};
 use crate::types::value::Utf8Type;
 use crate::types::{ColumnId, LogicalType};
 use itertools::Itertools;
-use sqlparser::ast::{CharLengthUnits, Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, ObjectName, Offset, OrderByExpr, Query, Select, SelectInto, SelectItem, SetExpr, SetOperator, SetQuantifier, TableAlias, TableFactor, TableWithJoins};
+use sqlparser::ast::{
+    CharLengthUnits, Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, ObjectName, Offset,
+    OrderByExpr, Query, Select, SelectInto, SelectItem, SetExpr, SetOperator, SetQuantifier,
+    TableAlias, TableFactor, TableWithJoins,
+};
 
 impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, 'b, T, A> {
     pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan, DatabaseError> {
@@ -598,12 +602,12 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                 Ok(expr) => {
                     need_parent = false;
                     expr
-                },
+                }
                 Err(DatabaseError::InvalidTable(table)) => {
                     if !self.context.parent_name.contains(&table) {
-                        return Err(DatabaseError::InvalidTable(table))
+                        return Err(DatabaseError::InvalidTable(table));
                     }
-                    let plan = self.bind_table_ref(&TableWithJoins{
+                    let plan = self.bind_table_ref(&TableWithJoins {
                         relation: TableFactor::Table {
                             name: ObjectName(vec![Ident::new(table)]),
                             alias: None,
@@ -612,15 +616,11 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                         },
                         joins: vec![],
                     })?;
-                    children = LJoinOperator::build(
-                        children,
-                        plan,
-                        JoinCondition::None,
-                        JoinType::Full,
-                    );
+                    children =
+                        LJoinOperator::build(children, plan, JoinCondition::None, JoinType::Full);
                     continue;
-                },
-                Err(e) => return Err(e)
+                }
+                Err(e) => return Err(e),
             };
         }
 
