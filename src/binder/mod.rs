@@ -114,7 +114,6 @@ pub struct BinderContext<'a, T: Transaction> {
     using: HashSet<String>,
 
     bind_step: QueryBindStep,
-    parent_name: Vec<String>,
     sub_queries: HashMap<QueryBindStep, Vec<SubQueryType>>,
 
     temp_table_id: Arc<AtomicUsize>,
@@ -172,7 +171,6 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         scala_functions: &'a ScalaFunctions,
         table_functions: &'a TableFunctions,
         temp_table_id: Arc<AtomicUsize>,
-        parent_name: Vec<String>,
     ) -> Self {
         BinderContext {
             scala_functions,
@@ -187,7 +185,6 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
             agg_calls: Default::default(),
             using: Default::default(),
             bind_step: QueryBindStep::From,
-            parent_name,
             sub_queries: Default::default(),
             temp_table_id,
             allow_default: false,
@@ -278,14 +275,27 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         Ok(source)
     }
 
-    pub fn bind_source<'b: 'a>(&self, table_name: &str) -> Result<&Source, DatabaseError> {
+    pub fn bind_source<'b: 'a>(
+        &self,
+        parent: Option<&'a BinderContext<'_, T>>,
+        table_name: &str,
+    ) -> (Result<&'b Source, DatabaseError>, bool) {
         if let Some(source) = self.bind_table.iter().find(|((t, alias, _), _)| {
             t.as_str() == table_name
                 || matches!(alias.as_ref().map(|a| a.as_str() == table_name), Some(true))
         }) {
-            Ok(source.1)
+            (Ok(source.1), false)
+        } else if let Some(context) = parent {
+            if let Some(source) = context.bind_table.iter().find(|((t, alias, _), _)| {
+                t.as_str() == table_name
+                    || matches!(alias.as_ref().map(|a| a.as_str() == table_name), Some(true))
+            }) {
+                (Ok(source.1), true)
+            } else {
+                (Err(DatabaseError::InvalidTable(table_name.into())), false)
+            }
         } else {
-            Err(DatabaseError::InvalidTable(table_name.into()))
+            (Err(DatabaseError::InvalidTable(table_name.into())), false)
         }
     }
 
@@ -553,7 +563,6 @@ pub mod test {
                     &scala_functions,
                     &table_functions,
                     Arc::new(AtomicUsize::new(0)),
-                    vec![],
                 ),
                 &[],
                 None,

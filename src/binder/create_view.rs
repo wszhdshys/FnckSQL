@@ -39,9 +39,10 @@ impl<T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'_, '_, T, A>
                     column.set_ref_table(view_name.clone(), Ulid::new(), true);
 
                     ScalarExpression::Alias {
-                        expr: Box::new(ScalarExpression::ColumnRef(mapping_column.clone())),
+                        expr: Box::new(ScalarExpression::ColumnRef(mapping_column.clone(), false)),
                         alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(
                             ColumnRef::from(column),
+                            false,
                         ))),
                     }
                 })

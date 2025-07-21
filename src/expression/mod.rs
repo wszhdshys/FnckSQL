@@ -39,7 +39,7 @@ pub enum AliasType {
 #[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub enum ScalarExpression {
     Constant(DataValue),
-    ColumnRef(ColumnRef),
+    ColumnRef(ColumnRef, bool),
     Alias {
         expr: Box<ScalarExpression>,
         alias: AliasType,
@@ -289,7 +289,7 @@ impl ScalarExpression {
     pub fn return_type(&self) -> LogicalType {
         match self {
             ScalarExpression::Constant(v) => v.logical_type(),
-            ScalarExpression::ColumnRef(col) => col.datatype().clone(),
+            ScalarExpression::ColumnRef(col, _) => col.datatype().clone(),
             ScalarExpression::Binary {
                 ty: return_type, ..
             }
@@ -353,7 +353,7 @@ impl ScalarExpression {
                 vec.push(expr.output_column());
             }
             match expr {
-                ScalarExpression::ColumnRef(col) => {
+                ScalarExpression::ColumnRef(col, _) => {
                     vec.push(col.clone());
                 }
                 ScalarExpression::Alias { expr, .. } => {
@@ -480,7 +480,7 @@ impl ScalarExpression {
     pub fn has_table_ref_column(&self) -> bool {
         match self {
             ScalarExpression::Constant(_) => false,
-            ScalarExpression::ColumnRef(column) => {
+            ScalarExpression::ColumnRef(column, _) => {
                 column.table_name().is_some() && column.id().is_some()
             }
             ScalarExpression::Alias { expr, .. } => expr.has_table_ref_column(),
@@ -600,7 +600,7 @@ impl ScalarExpression {
         match self {
             ScalarExpression::AggCall { .. } => true,
             ScalarExpression::Constant(_) => false,
-            ScalarExpression::ColumnRef(_) => false,
+            ScalarExpression::ColumnRef(_, _) => false,
             ScalarExpression::Alias { expr, .. } => expr.has_agg_call(),
             ScalarExpression::TypeCast { expr, .. } => expr.has_agg_call(),
             ScalarExpression::IsNull { expr, .. } => expr.has_agg_call(),
@@ -690,7 +690,7 @@ impl ScalarExpression {
     pub fn output_name(&self) -> String {
         match self {
             ScalarExpression::Constant(value) => format!("{}", value),
-            ScalarExpression::ColumnRef(col) => col.full_name(),
+            ScalarExpression::ColumnRef(col, _) => col.full_name(),
             ScalarExpression::Alias { alias, expr } => match alias {
                 AliasType::Name(alias) => alias.to_string(),
                 AliasType::Expr(alias_expr) => {
@@ -881,7 +881,7 @@ impl ScalarExpression {
 
     pub fn output_column(&self) -> ColumnRef {
         match self {
-            ScalarExpression::ColumnRef(col) => col.clone(),
+            ScalarExpression::ColumnRef(col, _) => col.clone(),
             ScalarExpression::Alias {
                 alias: AliasType::Expr(expr),
                 ..
@@ -1105,33 +1105,39 @@ mod test {
         )?;
         fn_assert(
             &mut cursor,
-            ScalarExpression::ColumnRef(ColumnRef::from(ColumnCatalog::direct_new(
-                ColumnSummary {
-                    name: "c3".to_string(),
-                    relation: ColumnRelation::Table {
-                        column_id: c3_column_id,
-                        table_name: Arc::new("t1".to_string()),
-                        is_temp: false,
+            ScalarExpression::ColumnRef(
+                ColumnRef::from(ColumnCatalog::direct_new(
+                    ColumnSummary {
+                        name: "c3".to_string(),
+                        relation: ColumnRelation::Table {
+                            column_id: c3_column_id,
+                            table_name: Arc::new("t1".to_string()),
+                            is_temp: false,
+                        },
                     },
-                },
+                    false,
+                    ColumnDesc::new(LogicalType::Integer, None, false, None)?,
+                    false,
+                )),
                 false,
-                ColumnDesc::new(LogicalType::Integer, None, false, None)?,
-                false,
-            ))),
+            ),
             Some((&transaction, &table_cache)),
             &mut reference_tables,
         )?;
         fn_assert(
             &mut cursor,
-            ScalarExpression::ColumnRef(ColumnRef::from(ColumnCatalog::direct_new(
-                ColumnSummary {
-                    name: "c4".to_string(),
-                    relation: ColumnRelation::None,
-                },
+            ScalarExpression::ColumnRef(
+                ColumnRef::from(ColumnCatalog::direct_new(
+                    ColumnSummary {
+                        name: "c4".to_string(),
+                        relation: ColumnRelation::None,
+                    },
+                    false,
+                    ColumnDesc::new(LogicalType::Boolean, None, false, None)?,
+                    false,
+                )),
                 false,
-                ColumnDesc::new(LogicalType::Boolean, None, false, None)?,
-                false,
-            ))),
+            ),
             Some((&transaction, &table_cache)),
             &mut reference_tables,
         )?;

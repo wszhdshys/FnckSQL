@@ -136,7 +136,7 @@ impl Operator {
             Operator::TableScan(op) => Some(
                 op.columns
                     .values()
-                    .map(|column| ScalarExpression::ColumnRef(column.clone()))
+                    .map(|column| ScalarExpression::ColumnRef(column.clone(), false))
                     .collect_vec(),
             ),
             Operator::Sort(_) | Operator::Limit(_) => None,
@@ -148,7 +148,7 @@ impl Operator {
                 schema_ref
                     .iter()
                     .cloned()
-                    .map(ScalarExpression::ColumnRef)
+                    .map(|col| ScalarExpression::ColumnRef(col, false))
                     .collect_vec(),
             ),
             Operator::FunctionScan(op) => Some(
@@ -156,7 +156,7 @@ impl Operator {
                     .inner
                     .output_schema()
                     .iter()
-                    .map(|column| ScalarExpression::ColumnRef(column.clone()))
+                    .map(|column| ScalarExpression::ColumnRef(column.clone(), false))
                     .collect_vec(),
             ),
             Operator::ShowTable

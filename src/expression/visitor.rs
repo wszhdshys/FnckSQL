@@ -254,7 +254,7 @@ pub fn walk_expr<'a, V: Visitor<'a>>(
 ) -> Result<(), DatabaseError> {
     match expr {
         ScalarExpression::Constant(value) => visitor.visit_constant(value),
-        ScalarExpression::ColumnRef(column_ref) => visitor.visit_column_ref(column_ref),
+        ScalarExpression::ColumnRef(column_ref, _) => visitor.visit_column_ref(column_ref),
         ScalarExpression::Alias { expr, alias } => visitor.visit_alias(expr, alias),
         ScalarExpression::TypeCast { expr, ty } => visitor.visit_type_cast(expr, ty),
         ScalarExpression::IsNull { negated, expr } => visitor.visit_is_null(*negated, expr),

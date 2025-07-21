@@ -216,7 +216,7 @@ impl<'a> RangeDetacher<'a> {
             ScalarExpression::Position { expr, .. } => self.detach(expr)?,
             ScalarExpression::Trim { expr, .. } => self.detach(expr)?,
             ScalarExpression::IsNull { expr, negated, .. } => match expr.as_ref() {
-                ScalarExpression::ColumnRef(column) => {
+                ScalarExpression::ColumnRef(column, _) => {
                     if let (Some(col_id), Some(col_table)) = (column.id(), column.table_name()) {
                         if &col_id == self.column_id && col_table.as_str() == self.table_name {
                             return if *negated {
@@ -253,7 +253,7 @@ impl<'a> RangeDetacher<'a> {
                 | ScalarExpression::Reference { .. }
                 | ScalarExpression::Empty => unreachable!(),
             },
-            ScalarExpression::Constant(_) | ScalarExpression::ColumnRef(_) => None,
+            ScalarExpression::Constant(_) | ScalarExpression::ColumnRef(_, _) => None,
             // FIXME: support [RangeDetacher::_detach]
             ScalarExpression::Tuple(_)
             | ScalarExpression::AggCall { .. }

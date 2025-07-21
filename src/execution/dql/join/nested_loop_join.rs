@@ -434,8 +434,8 @@ mod test {
 
         let on_keys = if eq {
             vec![(
-                ScalarExpression::ColumnRef(t1_columns[1].clone()),
-                ScalarExpression::ColumnRef(t2_columns[1].clone()),
+                ScalarExpression::ColumnRef(t1_columns[1].clone(), false),
+                ScalarExpression::ColumnRef(t2_columns[1].clone(), false),
             )]
         } else {
             vec![]
@@ -505,12 +505,14 @@ mod test {
 
         let filter = ScalarExpression::Binary {
             op: crate::expression::BinaryOperator::Gt,
-            left_expr: Box::new(ScalarExpression::ColumnRef(ColumnRef::from(
-                ColumnCatalog::new("c1".to_owned(), true, desc.clone()),
-            ))),
-            right_expr: Box::new(ScalarExpression::ColumnRef(ColumnRef::from(
-                ColumnCatalog::new("c4".to_owned(), true, desc.clone()),
-            ))),
+            left_expr: Box::new(ScalarExpression::ColumnRef(
+                ColumnRef::from(ColumnCatalog::new("c1".to_owned(), true, desc.clone())),
+                false,
+            )),
+            right_expr: Box::new(ScalarExpression::ColumnRef(
+                ColumnRef::from(ColumnCatalog::new("c4".to_owned(), true, desc.clone())),
+                false,
+            )),
             evaluator: Some(BinaryEvaluatorBox(Arc::new(Int32GtBinaryEvaluator))),
             ty: LogicalType::Boolean,
         };

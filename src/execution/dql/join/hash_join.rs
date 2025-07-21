@@ -342,8 +342,8 @@ mod test {
         ];
 
         let on_keys = vec![(
-            ScalarExpression::ColumnRef(t1_columns[0].clone()),
-            ScalarExpression::ColumnRef(t2_columns[0].clone()),
+            ScalarExpression::ColumnRef(t1_columns[0].clone(), false),
+            ScalarExpression::ColumnRef(t2_columns[0].clone(), false),
         )];
 
         let values_t1 = LogicalPlan {

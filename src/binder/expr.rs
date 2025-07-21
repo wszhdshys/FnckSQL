@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::slice;
 use std::sync::Arc;
 
-use super::{lower_ident, Binder, BinderContext, QueryBindStep, SubQueryType};
+use super::{lower_ident, Binder, BinderContext, QueryBindStep, Source, SubQueryType};
 use crate::expression::function::scala::{ArcScalarFunctionImpl, ScalarFunction};
 use crate::expression::function::table::{ArcTableFunctionImpl, TableFunction};
 use crate::expression::function::FunctionSummary;
@@ -259,9 +259,10 @@ impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T
 
         let alias_expr = ScalarExpression::Alias {
             expr: Box::new(expr),
-            alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(ColumnRef::from(
-                alias_column,
-            )))),
+            alias: AliasType::Expr(Box::new(ScalarExpression::ColumnRef(
+                ColumnRef::from(alias_column),
+                false,
+            ))),
         };
         let alias_plan = self.bind_project(sub_query, vec![alias_expr.clone()])?;
         Ok((alias_expr, alias_plan))
@@ -279,7 +280,6 @@ impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T
             scala_functions,
             table_functions,
             temp_table_id,
-            parent_name,
             ..
         } = &self.context;
         let mut binder = Binder::new(
@@ -290,16 +290,10 @@ impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T
                 scala_functions,
                 table_functions,
                 temp_table_id.clone(),
-                parent_name.clone(),
             ),
             self.args,
             Some(self),
         );
-
-        self.context.bind_table.iter().find(|((t, _, _), _)| {
-            binder.context.parent_name.push(t.as_str().to_string());
-            true
-        });
 
         let mut sub_query = binder.bind_query(subquery)?;
         let sub_query_schema = sub_query.output_schema();
@@ -319,13 +313,13 @@ impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T
 
             let columns = sub_query_schema
                 .iter()
-                .map(|column| ScalarExpression::ColumnRef(column.clone()))
+                .map(|column| ScalarExpression::ColumnRef(column.clone(), false))
                 .collect::<Vec<_>>();
             ScalarExpression::Tuple(columns)
         } else {
             fn_check(1)?;
 
-            ScalarExpression::ColumnRef(sub_query_schema[0].clone())
+            ScalarExpression::ColumnRef(sub_query_schema[0].clone(), false)
         };
         Ok((sub_query, expr))
     }
@@ -376,13 +370,39 @@ impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T
             try_default!(&full_name.0, full_name.1);
         }
         if let Some(table) = full_name.0.or(bind_table_name) {
-            let source = self.context.bind_source(&table)?;
+            let mut source: &Source;
+            let mut from_parent: bool;
+            let (mut parent, mut parent_context) = if let Some(parent) = self.parent {
+                (Some(parent), Some(&parent.context))
+            } else {
+                (None, None)
+            };
+
+            loop {
+                (source, from_parent) = match self.context.bind_source(parent_context, &table) {
+                    (Ok(source), from_parent) => (source, from_parent),
+                    (Err(e), _) => {
+                        if let Some(p) = parent {
+                            (parent, parent_context) = match p.parent {
+                                Some(parent) => (Some(parent), Some(&parent.context)),
+                                None => return Err(e),
+                            }
+                        } else {
+                            return Err(e);
+                        }
+                        continue;
+                    }
+                };
+                break;
+            }
+
             let schema_buf = self.table_schema_buf.entry(Arc::new(table)).or_default();
 
             Ok(ScalarExpression::ColumnRef(
                 source
                     .column(&full_name.1, schema_buf)
                     .ok_or_else(|| DatabaseError::ColumnNotFound(full_name.1.to_string()))?,
+                from_parent,
             ))
         } else {
             let op =
@@ -411,7 +431,7 @@ impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T
                                 table_schema_buf.entry(table_name.clone()).or_default();
                             source.column(&full_name.1, schema_buf)
                         } {
-                            *got_column = Some(ScalarExpression::ColumnRef(column));
+                            *got_column = Some(ScalarExpression::ColumnRef(column, false));
                         }
                     }
                 };
