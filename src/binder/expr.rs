@@ -279,6 +279,7 @@ impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T
             scala_functions,
             table_functions,
             temp_table_id,
+            parent_name,
             ..
         } = &self.context;
         let mut binder = Binder::new(
@@ -289,10 +290,17 @@ impl<'a, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '_, T
                 scala_functions,
                 table_functions,
                 temp_table_id.clone(),
+                parent_name.clone(),
             ),
             self.args,
             Some(self),
         );
+
+        self.context.bind_table.iter().find(|((t, _, _), _)| {
+            binder.context.parent_name.push(t.as_str().to_string());
+            true
+        });
+
         let mut sub_query = binder.bind_query(subquery)?;
         let sub_query_schema = sub_query.output_schema();
 

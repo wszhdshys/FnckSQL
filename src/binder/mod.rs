@@ -114,6 +114,7 @@ pub struct BinderContext<'a, T: Transaction> {
     using: HashSet<String>,
 
     bind_step: QueryBindStep,
+    parent_name: Vec<String>,
     sub_queries: HashMap<QueryBindStep, Vec<SubQueryType>>,
 
     temp_table_id: Arc<AtomicUsize>,
@@ -171,6 +172,7 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         scala_functions: &'a ScalaFunctions,
         table_functions: &'a TableFunctions,
         temp_table_id: Arc<AtomicUsize>,
+        parent_name: Vec<String>,
     ) -> Self {
         BinderContext {
             scala_functions,
@@ -185,6 +187,7 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
             agg_calls: Default::default(),
             using: Default::default(),
             bind_step: QueryBindStep::From,
+            parent_name,
             sub_queries: Default::default(),
             temp_table_id,
             allow_default: false,
@@ -550,6 +553,7 @@ pub mod test {
                     &scala_functions,
                     &table_functions,
                     Arc::new(AtomicUsize::new(0)),
+                    vec![],
                 ),
                 &[],
                 None,

@@ -35,11 +35,7 @@ use crate::types::tuple::{Schema, SchemaRef};
 use crate::types::value::Utf8Type;
 use crate::types::{ColumnId, LogicalType};
 use itertools::Itertools;
-use sqlparser::ast::{
-    CharLengthUnits, Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, Offset,
-    OrderByExpr, Query, Select, SelectInto, SelectItem, SetExpr, SetOperator, SetQuantifier,
-    TableAlias, TableFactor, TableWithJoins,
-};
+use sqlparser::ast::{CharLengthUnits, Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, ObjectName, Offset, OrderByExpr, Query, Select, SelectInto, SelectItem, SetExpr, SetOperator, SetQuantifier, TableAlias, TableFactor, TableWithJoins};
 
 impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, 'b, T, A> {
     pub(crate) fn bind_query(&mut self, query: &Query) -> Result<LogicalPlan, DatabaseError> {
@@ -559,6 +555,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             scala_functions,
             table_functions,
             temp_table_id,
+            parent_name,
             ..
         } = &self.context;
         let mut binder = Binder::new(
@@ -569,6 +566,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                 scala_functions,
                 table_functions,
                 temp_table_id.clone(),
+                parent_name.clone(),
             ),
             self.args,
             Some(self),
@@ -592,8 +590,39 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
         predicate: &Expr,
     ) -> Result<LogicalPlan, DatabaseError> {
         self.context.step(QueryBindStep::Where);
+        let mut need_parent = true;
+        let mut predicate_result = ScalarExpression::Empty;
 
-        let predicate = self.bind_expr(predicate)?;
+        while need_parent {
+            predicate_result = match self.bind_expr(predicate) {
+                Ok(expr) => {
+                    need_parent = false;
+                    expr
+                },
+                Err(DatabaseError::InvalidTable(table)) => {
+                    if !self.context.parent_name.contains(&table) {
+                        return Err(DatabaseError::InvalidTable(table))
+                    }
+                    let plan = self.bind_table_ref(&TableWithJoins{
+                        relation: TableFactor::Table {
+                            name: ObjectName(vec![Ident::new(table)]),
+                            alias: None,
+                            args: None,
+                            with_hints: vec![],
+                        },
+                        joins: vec![],
+                    })?;
+                    children = LJoinOperator::build(
+                        children,
+                        plan,
+                        JoinCondition::None,
+                        JoinType::Full,
+                    );
+                    continue;
+                },
+                Err(e) => return Err(e)
+            };
+        }
 
         if let Some(sub_queries) = self.context.sub_queries_at_now() {
             for sub_query in sub_queries {
@@ -664,7 +693,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                 };
 
                 Self::extract_join_keys(
-                    predicate.clone(),
+                    predicate_result.clone(),
                     &mut on_keys,
                     &mut filter,
                     children.output_schema(),
@@ -694,7 +723,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             }
             return Ok(children);
         }
-        Ok(FilterOperator::build(predicate, children, false))
+        Ok(FilterOperator::build(predicate_result, children, false))
     }
 
     fn bind_having(
