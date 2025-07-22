@@ -145,11 +145,11 @@ mod test {
         ]);
 
         let operator = AggregateOperator {
-            groupby_exprs: vec![ScalarExpression::ColumnRef(t1_schema[0].clone(), false)],
+            groupby_exprs: vec![ScalarExpression::ColumnRef(t1_schema[0].clone())],
             agg_calls: vec![ScalarExpression::AggCall {
                 distinct: false,
                 kind: AggKind::Sum,
-                args: vec![ScalarExpression::ColumnRef(t1_schema[1].clone(), false)],
+                args: vec![ScalarExpression::ColumnRef(t1_schema[1].clone())],
                 ty: LogicalType::Integer,
             }],
             is_distinct: false,

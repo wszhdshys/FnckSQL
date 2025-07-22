@@ -48,7 +48,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for CreateIndex {
                     .filter_map(|column| {
                         column
                             .id()
-                            .map(|id| (id, ScalarExpression::ColumnRef(column, false)))
+                            .map(|id| (id, ScalarExpression::ColumnRef(column)))
                     })
                     .unzip();
                 let schema = self.input.output_schema().clone();

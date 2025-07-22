@@ -33,7 +33,7 @@ impl ScalarExpression {
 
         match self {
             ScalarExpression::Constant(val) => Ok(val.clone()),
-            ScalarExpression::ColumnRef(col, _) => {
+            ScalarExpression::ColumnRef(col) => {
                 let Some((tuple, schema)) = tuple else {
                     return Ok(DataValue::Null);
                 };
