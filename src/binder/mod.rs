@@ -26,7 +26,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::catalog::view::View;
-use crate::catalog::{ColumnRef, TableCatalog, TableName};
+use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableName};
 use crate::db::{ScalaFunctions, TableFunctions};
 use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
@@ -276,12 +276,19 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         Ok(source)
     }
 
-    pub fn bind_source<'b: 'a>(&self, table_name: &str) -> Result<&Source, DatabaseError> {
+    pub fn bind_source<'b: 'a, A: AsRef<[(&'static str, DataValue)]>>(
+        &self,
+        parent: Option<&'a Binder<'a, 'b, T, A>>,
+        table_name: &str,
+        is_parent: bool,
+    ) -> Result<(&'b Source, bool), DatabaseError> {
         if let Some(source) = self.bind_table.iter().find(|((t, alias, _), _)| {
             t.as_str() == table_name
                 || matches!(alias.as_ref().map(|a| a.as_str() == table_name), Some(true))
         }) {
-            Ok(source.1)
+            Ok((source.1, is_parent))
+        } else if let Some(binder) = parent {
+            binder.context.bind_source(binder.parent, table_name, true)
         } else {
             Err(DatabaseError::InvalidTable(table_name.into()))
         }
@@ -323,6 +330,7 @@ pub struct Binder<'a, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>>
     args: &'a A,
     with_pk: Option<TableName>,
     pub(crate) parent: Option<&'b Binder<'a, 'b, T, A>>,
+    pub(crate) parent_table_col: HashMap<TableName, HashSet<String>>,
 }
 
 impl<'a, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, 'b, T, A> {
@@ -337,6 +345,7 @@ impl<'a, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'a, '
             args,
             with_pk: None,
             parent,
+            parent_table_col: Default::default(),
         }
     }
 
