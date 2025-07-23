@@ -505,12 +505,12 @@ mod test {
 
         let filter = ScalarExpression::Binary {
             op: crate::expression::BinaryOperator::Gt,
-            left_expr: Box::new(ScalarExpression::ColumnRef(
-                ColumnRef::from(ColumnCatalog::new("c1".to_owned(), true, desc.clone())),
-            )),
-            right_expr: Box::new(ScalarExpression::ColumnRef(
-                ColumnRef::from(ColumnCatalog::new("c4".to_owned(), true, desc.clone())),
-            )),
+            left_expr: Box::new(ScalarExpression::ColumnRef(ColumnRef::from(
+                ColumnCatalog::new("c1".to_owned(), true, desc.clone()),
+            ))),
+            right_expr: Box::new(ScalarExpression::ColumnRef(ColumnRef::from(
+                ColumnCatalog::new("c4".to_owned(), true, desc.clone()),
+            ))),
             evaluator: Some(BinaryEvaluatorBox(Arc::new(Int32GtBinaryEvaluator))),
             ty: LogicalType::Boolean,
         };

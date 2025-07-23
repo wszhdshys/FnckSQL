@@ -166,13 +166,18 @@ impl<S: Storage> State<S> {
 
         let best_plan = Self::default_optimizer(source_plan)
             .find_best(Some(&transaction.meta_loader(meta_cache)))?;
-        // println!("best_plan plan: {:#?}", best_plan);
+        //println!("best_plan plan: {:#?}", best_plan);
 
         Ok(best_plan)
     }
 
     pub(crate) fn default_optimizer(source_plan: LogicalPlan) -> HepOptimizer {
         HepOptimizer::new(source_plan)
+            .batch(
+                "Correlated Subquery".to_string(),
+                HepBatchStrategy::once_topdown(),
+                vec![NormalizationRuleImpl::CorrelateSubquery],
+            )
             .batch(
                 "Column Pruning".to_string(),
                 HepBatchStrategy::once_topdown(),

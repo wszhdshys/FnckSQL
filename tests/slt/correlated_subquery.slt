@@ -73,13 +73,6 @@ SELECT id, v1 FROM t1 WHERE EXISTS (  SELECT 1 FROM t2 WHERE t2.id = t1.id AND E
 2 b
 3 c
 
-# query ITI rowsort
-# SELECT id, v1, ( SELECT COUNT(*) FROM t2 WHERE t2.v2 >= 10 ) as cnt FROM t1
-# ----
-# 1 a 2
-# 2 b 3
-# 3 c 2
-
 query IT rowsort
 SELECT id, v1 FROM t1 WHERE v2 - 5 > ( SELECT AVG(v1) FROM t3 WHERE t3.id <= t1.id )
 ----

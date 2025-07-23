@@ -1105,37 +1105,33 @@ mod test {
         )?;
         fn_assert(
             &mut cursor,
-            ScalarExpression::ColumnRef(
-                ColumnRef::from(ColumnCatalog::direct_new(
-                    ColumnSummary {
-                        name: "c3".to_string(),
-                        relation: ColumnRelation::Table {
-                            column_id: c3_column_id,
-                            table_name: Arc::new("t1".to_string()),
-                            is_temp: false,
-                        },
+            ScalarExpression::ColumnRef(ColumnRef::from(ColumnCatalog::direct_new(
+                ColumnSummary {
+                    name: "c3".to_string(),
+                    relation: ColumnRelation::Table {
+                        column_id: c3_column_id,
+                        table_name: Arc::new("t1".to_string()),
+                        is_temp: false,
                     },
-                    false,
-                    ColumnDesc::new(LogicalType::Integer, None, false, None)?,
-                    false,
-                )),
-            ),
+                },
+                false,
+                ColumnDesc::new(LogicalType::Integer, None, false, None)?,
+                false,
+            ))),
             Some((&transaction, &table_cache)),
             &mut reference_tables,
         )?;
         fn_assert(
             &mut cursor,
-            ScalarExpression::ColumnRef(
-                ColumnRef::from(ColumnCatalog::direct_new(
-                    ColumnSummary {
-                        name: "c4".to_string(),
-                        relation: ColumnRelation::None,
-                    },
-                    false,
-                    ColumnDesc::new(LogicalType::Boolean, None, false, None)?,
-                    false,
-                )),
-            ),
+            ScalarExpression::ColumnRef(ColumnRef::from(ColumnCatalog::direct_new(
+                ColumnSummary {
+                    name: "c4".to_string(),
+                    relation: ColumnRelation::None,
+                },
+                false,
+                ColumnDesc::new(LogicalType::Boolean, None, false, None)?,
+                false,
+            ))),
             Some((&transaction, &table_cache)),
             &mut reference_tables,
         )?;

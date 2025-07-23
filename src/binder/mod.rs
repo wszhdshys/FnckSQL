@@ -25,7 +25,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::catalog::view::View;
-use crate::catalog::{ColumnCatalog, ColumnRef, TableCatalog, TableName};
+use crate::catalog::{ColumnRef, TableCatalog, TableName};
 use crate::db::{ScalaFunctions, TableFunctions};
 use crate::errors::DatabaseError;
 use crate::expression::ScalarExpression;
@@ -275,9 +275,9 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         Ok(source)
     }
 
-    pub fn bind_source<'b: 'a, A: AsRef<[(&'static str, DataValue)]> >(
+    pub fn bind_source<'b: 'a, A: AsRef<[(&'static str, DataValue)]>>(
         &self,
-        parent: Option<&'a Binder<'a,'b,T,A>>,
+        parent: Option<&'a Binder<'a, 'b, T, A>>,
         table_name: &str,
         is_parent: bool,
     ) -> Result<(&'b Source, bool), DatabaseError> {
@@ -287,10 +287,10 @@ impl<'a, T: Transaction> BinderContext<'a, T> {
         }) {
             Ok((source.1, is_parent))
         } else if let Some(binder) = parent {
-            binder.context.bind_source(binder.parent, table_name,true)
+            binder.context.bind_source(binder.parent, table_name, true)
         } else {
             Err(DatabaseError::InvalidTable(table_name.into()))
-        } 
+        }
     }
 
     // Tips: The order of this index is based on Aggregate being bound first.

@@ -36,7 +36,7 @@ use crate::types::value::Utf8Type;
 use crate::types::{ColumnId, LogicalType};
 use itertools::Itertools;
 use sqlparser::ast::{
-    CharLengthUnits, Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, ObjectName, Offset,
+    CharLengthUnits, Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, Offset,
     OrderByExpr, Query, Select, SelectInto, SelectItem, SetExpr, SetOperator, SetQuantifier,
     TableAlias, TableFactor, TableWithJoins,
 };
@@ -100,8 +100,6 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             plan
         };
         let mut select_list = self.normalize_select_item(&select.projection, &plan)?;
-
-        plan = self.bind_parent(plan)?;
 
         if let Some(predicate) = &select.selection {
             plan = self.bind_where(plan, predicate)?;
@@ -536,22 +534,6 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
         Ok(())
     }
 
-    fn bind_parent(
-        &mut self,
-        mut plan: LogicalPlan,
-    ) -> Result<LogicalPlan, DatabaseError> {
-        for (table,columns) in self.parent_table_col.clone().into_iter() {
-            let parent = self._bind_single_table_ref(None,table.as_str(),None)?;
-            plan = LJoinOperator::build(
-                plan,
-                parent,
-                JoinCondition::None,
-                JoinType::Full,
-            );
-        }
-        Ok(plan)
-    }
-
     fn bind_join(
         &mut self,
         mut left: LogicalPlan,
@@ -612,8 +594,6 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
         self.context.step(QueryBindStep::Where);
 
         let predicate = self.bind_expr(predicate)?;
-
-        children = self.bind_parent(children)?;
 
         if let Some(sub_queries) = self.context.sub_queries_at_now() {
             for sub_query in sub_queries {
