@@ -2,6 +2,7 @@ use crate::execution::{build_read, Executor, ReadExecutor};
 use crate::planner::LogicalPlan;
 use crate::storage::{StatisticsMetaCache, TableCache, Transaction, ViewCache};
 use crate::throw;
+use ahash::{HashSet, HashSetExt};
 use std::ops::Coroutine;
 use std::ops::CoroutineState;
 use std::pin::Pin;
@@ -36,11 +37,11 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for Except {
 
                 let mut coroutine = build_read(right_input, cache, transaction);
 
-                let mut except_col = vec![];
+                let mut except_col = HashSet::new();
 
                 while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
                     let tuple = throw!(tuple);
-                    except_col.push(tuple);
+                    except_col.insert(tuple);
                 }
 
                 let mut coroutine = build_read(left_input, cache, transaction);
