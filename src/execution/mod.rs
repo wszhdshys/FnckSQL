@@ -24,6 +24,7 @@ use crate::execution::dql::aggregate::hash_agg::HashAggExecutor;
 use crate::execution::dql::aggregate::simple_agg::SimpleAggExecutor;
 use crate::execution::dql::describe::Describe;
 use crate::execution::dql::dummy::Dummy;
+use crate::execution::dql::except::Except;
 use crate::execution::dql::explain::Explain;
 use crate::execution::dql::filter::Filter;
 use crate::execution::dql::function_scan::FunctionScan;
@@ -145,6 +146,11 @@ pub fn build_read<'a, T: Transaction + 'a>(
             let (left_input, right_input) = childrens.pop_twins();
 
             Union::from((left_input, right_input)).execute(cache, transaction)
+        }
+        Operator::Except(_) => {
+            let (left_input, right_input) = childrens.pop_twins();
+
+            Except::from((left_input, right_input)).execute(cache, transaction)
         }
         _ => unreachable!(),
     }

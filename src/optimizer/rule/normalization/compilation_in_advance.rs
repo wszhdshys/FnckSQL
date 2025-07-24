@@ -108,7 +108,8 @@ impl ExpressionRemapper {
             | Operator::Truncate(_)
             | Operator::CopyFromFile(_)
             | Operator::CopyToFile(_)
-            | Operator::Union(_) => (),
+            | Operator::Union(_)
+            | Operator::Except(_) => (),
         }
         if let Some(exprs) = operator.output_exprs() {
             *output_exprs = exprs;
@@ -217,7 +218,8 @@ impl EvaluatorBind {
             | Operator::Truncate(_)
             | Operator::CopyFromFile(_)
             | Operator::CopyToFile(_)
-            | Operator::Union(_) => (),
+            | Operator::Union(_)
+            | Operator::Except(_) => (),
         }
 
         Ok(())
