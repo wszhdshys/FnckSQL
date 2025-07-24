@@ -194,6 +194,7 @@ impl CorrelatedSubquery {
             | Operator::CreateView(_)
             | Operator::DropTable(_)
             | Operator::DropView(_)
+            | Operator::DropIndex(_)
             | Operator::Truncate(_)
             | Operator::ShowTable
             | Operator::ShowView
