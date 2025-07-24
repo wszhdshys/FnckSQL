@@ -37,19 +37,16 @@ macro_rules! trans_references {
 impl CorrelatedSubquery {
     fn _apply(
         column_references: HashSet<&ColumnRef>,
-        scan_columns: HashMap<TableName, (Vec<ColumnId>, HashMap<ColumnId, usize>, Vec<IndexInfo>)>,
+        mut used_scan: HashMap<TableName, TableScanOperator>,
         node_id: HepNodeId,
         graph: &mut HepGraph,
-    ) -> Result<
-        HashMap<TableName, (Vec<ColumnId>, HashMap<ColumnId, usize>, Vec<IndexInfo>)>,
-        DatabaseError,
-    > {
+    ) -> Result<HashMap<TableName, TableScanOperator>, DatabaseError> {
         let operator = &graph.operator(node_id).clone();
 
         match operator {
             Operator::Aggregate(op) => {
                 let is_distinct = op.is_distinct;
-                let referenced_columns = operator.referenced_columns(false);
+                let referenced_columns = operator.referenced_columns(true);
                 let mut new_column_references = trans_references!(&referenced_columns);
                 // on distinct
                 if is_distinct {
@@ -58,62 +55,45 @@ impl CorrelatedSubquery {
                     }
                 }
 
-                Self::recollect_apply(new_column_references, scan_columns, node_id, graph)
+                Self::recollect_apply(new_column_references, used_scan, node_id, graph)
             }
             Operator::Project(op) => {
-                let mut has_count_star = HasCountStar::default();
-                for expr in &op.exprs {
-                    has_count_star.visit(expr)?;
-                }
-                let referenced_columns = operator.referenced_columns(false);
+                let referenced_columns = operator.referenced_columns(true);
                 let new_column_references = trans_references!(&referenced_columns);
 
-                Self::recollect_apply(new_column_references, scan_columns, node_id, graph)
+                Self::recollect_apply(new_column_references, used_scan, node_id, graph)
             }
-            Operator::TableScan(op) => {
-                let table_column: HashSet<&ColumnRef> = op.columns.values().collect();
-                let mut new_scan_columns = scan_columns.clone();
-                new_scan_columns.insert(
-                    op.table_name.clone(),
-                    (
-                        op.primary_keys.clone(),
-                        op.columns
-                            .iter()
-                            .map(|(num, col)| (col.id().unwrap(), *num))
-                            .collect(),
-                        op.index_infos.clone(),
-                    ),
-                );
-                let mut parent_col = HashMap::new();
+            TableScan(op) => {
+                let table_columns: HashSet<&ColumnRef> = op.columns.values().collect();
+                let mut parent_scan_to_added = HashMap::new();
                 for col in column_references {
-                    match (
-                        table_column.contains(col),
-                        scan_columns.get(col.table_name().unwrap_or(&Arc::new("".to_string()))),
-                    ) {
-                        (false, Some(..)) => {
-                            parent_col
-                                .entry(col.table_name().unwrap())
-                                .or_insert(HashSet::new())
-                                .insert(col);
+                    if table_columns.contains(col) {
+                        continue;
+                    }
+                    if let Some(table_name) = col.table_name() {
+                        if !used_scan.contains_key(table_name) {
+                            continue;
                         }
-                        _ => continue,
+                        parent_scan_to_added
+                            .entry(table_name)
+                            .or_insert(HashSet::new())
+                            .insert(col);
                     }
                 }
-                for (table_name, table_columns) in parent_col {
-                    let table_columns = table_columns.into_iter().collect_vec();
-                    let (primary_keys, columns, index_infos) =
-                        scan_columns.get(table_name).unwrap();
-                    let map: BTreeMap<usize, ColumnRef> = table_columns
-                        .into_iter()
-                        .map(|col| (*columns.get(&col.id().unwrap()).unwrap(), col.clone()))
-                        .collect();
+                for (table_name, table_columns) in parent_scan_to_added {
+                    let op = used_scan.get(table_name).unwrap();
                     let left_operator = graph.operator(node_id).clone();
                     let right_operator = TableScan(TableScanOperator {
                         table_name: table_name.clone(),
-                        primary_keys: primary_keys.clone(),
-                        columns: map,
+                        primary_keys: op.primary_keys.clone(),
+                        columns: op
+                            .columns
+                            .iter()
+                            .filter(|(_, column)| table_columns.contains(column))
+                            .map(|(i, col)| (*i, col.clone()))
+                            .collect(),
                         limit: (None, None),
-                        index_infos: index_infos.clone(),
+                        index_infos: op.index_infos.clone(),
                         with_pk: false,
                     });
                     let join_operator = Join(JoinOperator {
@@ -135,41 +115,33 @@ impl CorrelatedSubquery {
                         _ => unreachable!(),
                     }
                 }
-                Ok(new_scan_columns)
+                used_scan.insert(op.table_name.clone(), op.clone());
+                Ok(used_scan)
             }
             Operator::Sort(_) | Operator::Limit(_) | Operator::Filter(_) | Operator::Union(_) => {
-                let mut new_scan_columns = scan_columns.clone();
-                let temp_columns = operator.referenced_columns(false);
-                // why?
+                let temp_columns = operator.referenced_columns(true);
                 let mut column_references = column_references;
                 for column in temp_columns.iter() {
                     column_references.insert(column);
                 }
-                for child_id in graph.children_at(node_id).collect_vec() {
-                    let copy_references = column_references.clone();
-                    let copy_scan = scan_columns.clone();
-                    if let Ok(scan) = Self::_apply(copy_references, copy_scan, child_id, graph) {
-                        new_scan_columns.extend(scan);
-                    };
-                }
-                Ok(new_scan_columns)
+                Self::recollect_apply(column_references, used_scan, node_id, graph)
             }
-            Operator::Join(_) => {
-                let mut new_scan_columns = scan_columns.clone();
-                for child_id in graph.children_at(node_id).collect_vec() {
-                    let copy_references = column_references.clone();
-                    let copy_scan = new_scan_columns.clone();
-                    if let Ok(scan) = Self::_apply(copy_references, copy_scan, child_id, graph) {
-                        new_scan_columns.extend(scan);
-                    };
+            Join(_) => {
+                let used_scan =
+                    Self::recollect_apply(column_references.clone(), used_scan, node_id, graph)?;
+                let temp_columns = operator.referenced_columns(true);
+                let mut column_references = column_references;
+                for column in temp_columns.iter() {
+                    column_references.insert(column);
                 }
-                Ok(new_scan_columns)
+                Ok(used_scan)
+                //todo Supplemental testing is required
             }
             // Last Operator
-            Operator::Dummy | Operator::Values(_) | Operator::FunctionScan(_) => Ok(scan_columns),
+            Operator::Dummy | Operator::Values(_) | Operator::FunctionScan(_) => Ok(used_scan),
             Operator::Explain => {
                 if let Some(child_id) = graph.eldest_child_at(node_id) {
-                    Self::_apply(column_references, scan_columns, child_id, graph)
+                    Self::_apply(column_references, used_scan, child_id, graph)
                 } else {
                     unreachable!()
                 }
@@ -179,11 +151,11 @@ impl CorrelatedSubquery {
             | Operator::Update(_)
             | Operator::Delete(_)
             | Operator::Analyze(_) => {
-                let referenced_columns = operator.referenced_columns(false);
+                let referenced_columns = operator.referenced_columns(true);
                 let new_column_references = trans_references!(&referenced_columns);
 
                 if let Some(child_id) = graph.eldest_child_at(node_id) {
-                    Self::recollect_apply(new_column_references, scan_columns, child_id, graph)
+                    Self::recollect_apply(new_column_references, used_scan, child_id, graph)
                 } else {
                     unreachable!();
                 }
@@ -202,29 +174,23 @@ impl CorrelatedSubquery {
             | Operator::CopyToFile(_)
             | Operator::AddColumn(_)
             | Operator::DropColumn(_)
-            | Operator::Describe(_) => Ok(scan_columns),
+            | Operator::Describe(_) => Ok(used_scan),
         }
     }
 
     fn recollect_apply(
         referenced_columns: HashSet<&ColumnRef>,
-        scan_columns: HashMap<TableName, (Vec<ColumnId>, HashMap<ColumnId, usize>, Vec<IndexInfo>)>,
+        mut used_scan: HashMap<TableName, TableScanOperator>,
         node_id: HepNodeId,
         graph: &mut HepGraph,
-    ) -> Result<
-        HashMap<TableName, (Vec<ColumnId>, HashMap<ColumnId, usize>, Vec<IndexInfo>)>,
-        DatabaseError,
-    > {
-        let mut new_scan_columns = scan_columns.clone();
+    ) -> Result<HashMap<TableName, TableScanOperator>, DatabaseError> {
         for child_id in graph.children_at(node_id).collect_vec() {
             let copy_references = referenced_columns.clone();
-            let copy_scan = scan_columns.clone();
-
-            if let Ok(scan) = Self::_apply(copy_references, copy_scan, child_id, graph) {
-                new_scan_columns.extend(scan);
-            };
+            let copy_scan = used_scan.clone();
+            let scan = Self::_apply(copy_references, copy_scan, child_id, graph)?;
+            used_scan.extend(scan);
         }
-        Ok(new_scan_columns)
+        Ok(used_scan)
     }
 }
 
