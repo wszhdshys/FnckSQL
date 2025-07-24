@@ -23,7 +23,7 @@ pub fn types(schema: &Schema) -> Vec<LogicalType> {
         .collect_vec()
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Tuple {
     pub pk: Option<TupleId>,
     pub values: Vec<DataValue>,

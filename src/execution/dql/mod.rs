@@ -1,6 +1,7 @@
 pub(crate) mod aggregate;
 pub(crate) mod describe;
 pub(crate) mod dummy;
+pub(crate) mod except;
 pub(crate) mod explain;
 pub(crate) mod filter;
 pub(crate) mod function_scan;

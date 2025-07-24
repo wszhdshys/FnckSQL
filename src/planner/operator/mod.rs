@@ -11,6 +11,7 @@ pub mod describe;
 pub mod drop_index;
 pub mod drop_table;
 pub mod drop_view;
+pub mod except;
 pub mod filter;
 pub mod function_scan;
 pub mod insert;
@@ -43,6 +44,7 @@ use crate::planner::operator::describe::DescribeOperator;
 use crate::planner::operator::drop_index::DropIndexOperator;
 use crate::planner::operator::drop_table::DropTableOperator;
 use crate::planner::operator::drop_view::DropViewOperator;
+use crate::planner::operator::except::ExceptOperator;
 use crate::planner::operator::function_scan::FunctionScanOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
@@ -73,6 +75,7 @@ pub enum Operator {
     ShowView,
     Explain,
     Describe(DescribeOperator),
+    Except(ExceptOperator),
     Union(UnionOperator),
     // DML
     Insert(InsertOperator),
@@ -145,6 +148,10 @@ impl Operator {
             Operator::Sort(_) | Operator::Limit(_) => None,
             Operator::Values(ValuesOperator { schema_ref, .. })
             | Operator::Union(UnionOperator {
+                left_schema_ref: schema_ref,
+                ..
+            })
+            | Operator::Except(ExceptOperator {
                 left_schema_ref: schema_ref,
                 ..
             }) => Some(
@@ -230,6 +237,10 @@ impl Operator {
             Operator::Union(UnionOperator {
                 left_schema_ref,
                 _right_schema_ref,
+            })
+            | Operator::Except(ExceptOperator {
+                left_schema_ref,
+                _right_schema_ref,
             }) => left_schema_ref
                 .iter()
                 .chain(_right_schema_ref.iter())
@@ -293,6 +304,7 @@ impl fmt::Display for Operator {
             Operator::CopyFromFile(op) => write!(f, "{}", op),
             Operator::CopyToFile(op) => write!(f, "{}", op),
             Operator::Union(op) => write!(f, "{}", op),
+            Operator::Except(op) => write!(f, "{}", op),
         }
     }
 }

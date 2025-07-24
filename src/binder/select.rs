@@ -24,6 +24,7 @@ use crate::execution::dql::join::joins_nullable;
 use crate::expression::agg::AggKind;
 use crate::expression::{AliasType, BinaryOperator};
 use crate::planner::operator::aggregate::AggregateOperator;
+use crate::planner::operator::except::ExceptOperator;
 use crate::planner::operator::function_scan::FunctionScanOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
@@ -181,56 +182,83 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             }
             true
         };
-        match (op, is_all) {
-            (SetOperator::Union, true) => {
-                let left_schema = left_plan.output_schema();
-                let right_schema = right_plan.output_schema();
 
-                if !fn_eq(left_schema, right_schema) {
-                    return Err(DatabaseError::MisMatch(
-                        "the output types on the left",
-                        "the output types on the right",
-                    ));
+        let left_schema = left_plan.output_schema();
+        let right_schema = right_plan.output_schema();
+
+        if !fn_eq(left_schema, right_schema) {
+            return Err(DatabaseError::MisMatch(
+                "the output types on the left",
+                "the output types on the right",
+            ));
+        }
+
+        match op {
+            SetOperator::Union => {
+                if is_all {
+                    Ok(UnionOperator::build(
+                        left_schema.clone(),
+                        right_schema.clone(),
+                        left_plan,
+                        right_plan,
+                    ))
+                } else {
+                    let distinct_exprs = left_schema
+                        .iter()
+                        .cloned()
+                        .map(ScalarExpression::ColumnRef)
+                        .collect_vec();
+
+                    let union_op = Operator::Union(UnionOperator {
+                        left_schema_ref: left_schema.clone(),
+                        _right_schema_ref: right_schema.clone(),
+                    });
+
+                    Ok(self.bind_distinct(
+                        LogicalPlan::new(
+                            union_op,
+                            Childrens::Twins {
+                                left: left_plan,
+                                right: right_plan,
+                            },
+                        ),
+                        distinct_exprs,
+                    ))
                 }
-                Ok(UnionOperator::build(
-                    left_schema.clone(),
-                    right_schema.clone(),
-                    left_plan,
-                    right_plan,
-                ))
             }
-            (SetOperator::Union, false) => {
-                let left_schema = left_plan.output_schema();
-                let right_schema = right_plan.output_schema();
+            SetOperator::Except => {
+                if is_all {
+                    Ok(ExceptOperator::build(
+                        left_schema.clone(),
+                        right_schema.clone(),
+                        left_plan,
+                        right_plan,
+                    ))
+                } else {
+                    let distinct_exprs = left_schema
+                        .iter()
+                        .cloned()
+                        .map(ScalarExpression::ColumnRef)
+                        .collect_vec();
 
-                if !fn_eq(left_schema, right_schema) {
-                    return Err(DatabaseError::MisMatch(
-                        "the output types on the left",
-                        "the output types on the right",
-                    ));
+                    let except_op = Operator::Except(ExceptOperator {
+                        left_schema_ref: left_schema.clone(),
+                        _right_schema_ref: right_schema.clone(),
+                    });
+
+                    Ok(self.bind_distinct(
+                        LogicalPlan::new(
+                            except_op,
+                            Childrens::Twins {
+                                left: left_plan,
+                                right: right_plan,
+                            },
+                        ),
+                        distinct_exprs,
+                    ))
                 }
-                let union_op = Operator::Union(UnionOperator {
-                    left_schema_ref: left_schema.clone(),
-                    _right_schema_ref: right_schema.clone(),
-                });
-                let distinct_exprs = left_schema
-                    .iter()
-                    .cloned()
-                    .map(ScalarExpression::ColumnRef)
-                    .collect_vec();
-
-                Ok(self.bind_distinct(
-                    LogicalPlan::new(
-                        union_op,
-                        Childrens::Twins {
-                            left: left_plan,
-                            right: right_plan,
-                        },
-                    ),
-                    distinct_exprs,
-                ))
             }
-            (set_operator, _) => Err(DatabaseError::UnsupportedStmt(format!(
+            set_operator => Err(DatabaseError::UnsupportedStmt(format!(
                 "set operator: {:?}",
                 set_operator
             ))),

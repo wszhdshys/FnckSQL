@@ -1,6 +1,7 @@
 pub mod operator;
 
 use crate::catalog::{ColumnCatalog, ColumnRef, TableName};
+use crate::planner::operator::except::ExceptOperator;
 use crate::planner::operator::join::JoinType;
 use crate::planner::operator::union::UnionOperator;
 use crate::planner::operator::values::ValuesOperator;
@@ -167,6 +168,10 @@ impl LogicalPlan {
             }
             Operator::Values(ValuesOperator { schema_ref, .. })
             | Operator::Union(UnionOperator {
+                left_schema_ref: schema_ref,
+                ..
+            })
+            | Operator::Except(ExceptOperator {
                 left_schema_ref: schema_ref,
                 ..
             }) => SchemaOutput::SchemaRef(schema_ref.clone()),
