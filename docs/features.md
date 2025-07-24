@@ -144,6 +144,7 @@ let kite_sql = DataBaseBuilder::path("./data")
 - [x] Explain
 - [x] Describe
 - [x] Union
+- [x] EXCEPT
 
 ### DML
 - [x] Insert
