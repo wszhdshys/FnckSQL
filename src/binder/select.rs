@@ -160,184 +160,49 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
     fn bind_set_cast(
         &self,
         mut left_plan: LogicalPlan,
-        len: usize,
-        right_schema: &SchemaRef,
-    ) -> Result<LogicalPlan, DatabaseError> {
-        let mut cast = vec![];
+        mut right_plan: LogicalPlan,
+    ) -> Result<(LogicalPlan, LogicalPlan), DatabaseError> {
+        let mut left_cast = vec![];
+        let mut right_cast = vec![];
+
         let left_schema = left_plan.output_schema();
-        for i in 0..len {
-            match (left_schema[i].datatype(), right_schema[i].datatype()) {
-                (LogicalType::UTinyint, LogicalType::Tinyint) => {
-                    cast.push(ScalarExpression::TypeCast {
-                        expr: Box::new(ScalarExpression::ColumnRef(left_schema[i].clone())),
-                        ty: LogicalType::Tinyint,
-                    });
-                }
-                (LogicalType::UTinyint, LogicalType::USmallint) => {
-                    cast.push(ScalarExpression::TypeCast {
-                        expr: Box::new(ScalarExpression::ColumnRef(left_schema[i].clone())),
-                        ty: LogicalType::USmallint,
-                    });
-                }
-                (
-                    LogicalType::Tinyint | LogicalType::UTinyint | LogicalType::USmallint,
-                    LogicalType::Smallint,
-                ) => {
-                    cast.push(ScalarExpression::TypeCast {
-                        expr: Box::new(ScalarExpression::ColumnRef(left_schema[i].clone())),
-                        ty: LogicalType::Smallint,
-                    });
-                }
-                (
-                    LogicalType::Tinyint
-                    | LogicalType::Smallint
-                    | LogicalType::UTinyint
-                    | LogicalType::USmallint,
-                    LogicalType::UInteger,
-                ) => {
-                    cast.push(ScalarExpression::TypeCast {
-                        expr: Box::new(ScalarExpression::ColumnRef(left_schema[i].clone())),
-                        ty: LogicalType::UInteger,
-                    });
-                }
-                (
-                    LogicalType::Tinyint
-                    | LogicalType::Smallint
-                    | LogicalType::UInteger
-                    | LogicalType::UTinyint
-                    | LogicalType::USmallint,
-                    LogicalType::Integer,
-                ) => {
-                    cast.push(ScalarExpression::TypeCast {
-                        expr: Box::new(ScalarExpression::ColumnRef(left_schema[i].clone())),
-                        ty: LogicalType::Integer,
-                    });
-                }
-                (
-                    LogicalType::Tinyint
-                    | LogicalType::Smallint
-                    | LogicalType::UInteger
-                    | LogicalType::UTinyint
-                    | LogicalType::USmallint
-                    | LogicalType::Integer,
-                    LogicalType::UBigint,
-                ) => {
-                    cast.push(ScalarExpression::TypeCast {
-                        expr: Box::new(ScalarExpression::ColumnRef(left_schema[i].clone())),
-                        ty: LogicalType::UBigint,
-                    });
-                }
-                (
-                    LogicalType::Tinyint
-                    | LogicalType::Smallint
-                    | LogicalType::UInteger
-                    | LogicalType::UTinyint
-                    | LogicalType::USmallint
-                    | LogicalType::Integer
-                    | LogicalType::UBigint,
-                    LogicalType::Bigint,
-                ) => {
-                    cast.push(ScalarExpression::TypeCast {
-                        expr: Box::new(ScalarExpression::ColumnRef(left_schema[i].clone())),
-                        ty: LogicalType::Bigint,
-                    });
-                }
-                (
-                    LogicalType::Integer
-                    | LogicalType::Tinyint
-                    | LogicalType::Smallint
-                    | LogicalType::UInteger
-                    | LogicalType::UTinyint
-                    | LogicalType::USmallint,
-                    LogicalType::Float,
-                ) => {
-                    cast.push(ScalarExpression::TypeCast {
-                        expr: Box::new(ScalarExpression::ColumnRef(left_schema[i].clone())),
-                        ty: LogicalType::Float,
-                    });
-                }
-                (
-                    LogicalType::Integer
-                    | LogicalType::Tinyint
-                    | LogicalType::Smallint
-                    | LogicalType::UInteger
-                    | LogicalType::UTinyint
-                    | LogicalType::USmallint
-                    | LogicalType::Float,
-                    LogicalType::Double,
-                ) => {
-                    cast.push(ScalarExpression::TypeCast {
-                        expr: Box::new(ScalarExpression::ColumnRef(left_schema[i].clone())),
-                        ty: LogicalType::Double,
-                    });
-                }
-                (
-                    LogicalType::Integer
-                    | LogicalType::Tinyint
-                    | LogicalType::Smallint
-                    | LogicalType::UInteger
-                    | LogicalType::UTinyint
-                    | LogicalType::USmallint
-                    | LogicalType::Float
-                    | LogicalType::Double
-                    | LogicalType::UBigint
-                    | LogicalType::Bigint,
-                    LogicalType::Decimal(_, _),
-                ) => {
-                    cast.push(ScalarExpression::TypeCast {
-                        expr: Box::new(ScalarExpression::ColumnRef(left_schema[i].clone())),
-                        ty: LogicalType::Decimal(None, None),
-                    });
-                }
-                (left_type, LogicalType::Char(_, _)) => {
-                    if matches!(left_type, &LogicalType::Varchar(_, _)) {
-                        continue;
-                    }
-                    cast.push(ScalarExpression::TypeCast {
-                        expr: Box::new(ScalarExpression::ColumnRef(left_schema[i].clone())),
-                        ty: LogicalType::Char(0, Characters),
-                    });
-                }
-                (_, LogicalType::Varchar(_, _)) => {
-                    cast.push(ScalarExpression::TypeCast {
-                        expr: Box::new(ScalarExpression::ColumnRef(left_schema[i].clone())),
-                        ty: LogicalType::Varchar(None, Characters),
-                    });
-                }
-                (LogicalType::Boolean, right_type) => {
-                    cast.push(ScalarExpression::TypeCast {
-                        expr: Box::new(ScalarExpression::ColumnRef(left_schema[i].clone())),
-                        ty: right_type.clone(),
-                    });
-                }
-                (LogicalType::Date, LogicalType::DateTime) => {
-                    cast.push(ScalarExpression::TypeCast {
-                        expr: Box::new(ScalarExpression::ColumnRef(left_schema[i].clone())),
-                        ty: LogicalType::DateTime,
-                    });
-                }
-                (LogicalType::DateTime, LogicalType::TimeStamp(_, _)) => {
-                    cast.push(ScalarExpression::TypeCast {
-                        expr: Box::new(ScalarExpression::ColumnRef(left_schema[i].clone())),
-                        ty: LogicalType::TimeStamp(None, false),
-                    });
-                }
-                (LogicalType::Time(_), LogicalType::TimeStamp(_, _)) => {
-                    return Err(DatabaseError::CastFail {
-                        from: LogicalType::Time(None),
-                        to: LogicalType::TimeStamp(None,false),
-                    });
-                }
-                _ => cast.push(ScalarExpression::ColumnRef(left_schema[i].clone())),
+        let right_schema = right_plan.output_schema();
+
+        for (left_schema, right_schema) in left_schema.iter().zip(right_schema.iter()) {
+            let cast_type = LogicalType::max_logical_type(left_schema.datatype(),right_schema.datatype())?;
+            if &cast_type != left_schema.datatype() {
+                left_cast.push(ScalarExpression::TypeCast {
+                    expr: Box::new(ScalarExpression::ColumnRef(left_schema.clone())),
+                    ty: cast_type.clone(),
+                });
+            } else {
+                left_cast.push(ScalarExpression::ColumnRef(left_schema.clone()));
+            }
+            if &cast_type != right_schema.datatype() {
+                right_cast.push(ScalarExpression::TypeCast {
+                    expr: Box::new(ScalarExpression::ColumnRef(right_schema.clone())),
+                    ty: cast_type.clone(),
+                });
+            } else {
+                right_cast.push(ScalarExpression::ColumnRef(right_schema.clone()));
             }
         }
-        if cast.len() > 0 {
+
+        if left_cast.len() > 0 {
             left_plan = LogicalPlan::new(
-                Operator::Project(ProjectOperator { exprs: cast }),
+                Operator::Project(ProjectOperator { exprs: left_cast }),
                 Childrens::Only(left_plan),
             );
         }
-        Ok(left_plan)
+
+        if right_cast.len() > 0 {
+            right_plan = LogicalPlan::new(
+                Operator::Project(ProjectOperator { exprs: right_cast }),
+                Childrens::Only(right_plan),
+            );
+        }
+
+        Ok((left_plan, right_plan))
     }
 
     pub(crate) fn bind_set_operation(
@@ -370,9 +235,8 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             .zip(right_schema.iter())
             .all(|(left, right)| left.datatype() == right.datatype())
         {
-            left_plan = self.bind_set_cast(left_plan, left_len, &right_schema)?;
+            (left_plan, right_plan) = self.bind_set_cast(left_plan, right_plan)?;
             left_schema = left_plan.output_schema();
-            right_plan = self.bind_set_cast(right_plan, left_len, &left_schema)?;
             right_schema = right_plan.output_schema();
         }
 
