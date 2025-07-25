@@ -169,7 +169,8 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
         let right_schema = right_plan.output_schema();
 
         for (left_schema, right_schema) in left_schema.iter().zip(right_schema.iter()) {
-            let cast_type = LogicalType::max_logical_type(left_schema.datatype(),right_schema.datatype())?;
+            let cast_type =
+                LogicalType::max_logical_type(left_schema.datatype(), right_schema.datatype())?;
             if &cast_type != left_schema.datatype() {
                 left_cast.push(ScalarExpression::TypeCast {
                     expr: Box::new(ScalarExpression::ColumnRef(left_schema.clone())),
@@ -231,7 +232,8 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             ));
         }
 
-        if !left_schema.iter()
+        if !left_schema
+            .iter()
             .zip(right_schema.iter())
             .all(|(left, right)| left.datatype() == right.datatype())
         {
