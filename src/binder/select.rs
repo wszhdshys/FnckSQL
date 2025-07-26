@@ -36,6 +36,7 @@ use crate::types::tuple::{Schema, SchemaRef};
 use crate::types::value::Utf8Type;
 use crate::types::{ColumnId, LogicalType};
 use itertools::Itertools;
+use sqlparser::ast::CharLengthUnits::Characters;
 use sqlparser::ast::{
     CharLengthUnits, Distinct, Expr, Ident, Join, JoinConstraint, JoinOperator, Offset,
     OrderByExpr, Query, Select, SelectInto, SelectItem, SetExpr, SetOperator, SetQuantifier,
@@ -156,6 +157,55 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
         Ok(plan)
     }
 
+    fn bind_set_cast(
+        &self,
+        mut left_plan: LogicalPlan,
+        mut right_plan: LogicalPlan,
+    ) -> Result<(LogicalPlan, LogicalPlan), DatabaseError> {
+        let mut left_cast = vec![];
+        let mut right_cast = vec![];
+
+        let left_schema = left_plan.output_schema();
+        let right_schema = right_plan.output_schema();
+
+        for (left_schema, right_schema) in left_schema.iter().zip(right_schema.iter()) {
+            let cast_type =
+                LogicalType::max_logical_type(left_schema.datatype(), right_schema.datatype())?;
+            if &cast_type != left_schema.datatype() {
+                left_cast.push(ScalarExpression::TypeCast {
+                    expr: Box::new(ScalarExpression::ColumnRef(left_schema.clone())),
+                    ty: cast_type.clone(),
+                });
+            } else {
+                left_cast.push(ScalarExpression::ColumnRef(left_schema.clone()));
+            }
+            if &cast_type != right_schema.datatype() {
+                right_cast.push(ScalarExpression::TypeCast {
+                    expr: Box::new(ScalarExpression::ColumnRef(right_schema.clone())),
+                    ty: cast_type.clone(),
+                });
+            } else {
+                right_cast.push(ScalarExpression::ColumnRef(right_schema.clone()));
+            }
+        }
+
+        if left_cast.len() > 0 {
+            left_plan = LogicalPlan::new(
+                Operator::Project(ProjectOperator { exprs: left_cast }),
+                Childrens::Only(left_plan),
+            );
+        }
+
+        if right_cast.len() > 0 {
+            right_plan = LogicalPlan::new(
+                Operator::Project(ProjectOperator { exprs: right_cast }),
+                Childrens::Only(right_plan),
+            );
+        }
+
+        Ok((left_plan, right_plan))
+    }
+
     pub(crate) fn bind_set_operation(
         &mut self,
         op: &SetOperator,
@@ -169,28 +219,27 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
         };
         let mut left_plan = self.bind_set_expr(left)?;
         let mut right_plan = self.bind_set_expr(right)?;
-        let fn_eq = |left_schema: &Schema, right_schema: &Schema| {
-            let left_len = left_schema.len();
 
-            if left_len != right_schema.len() {
-                return false;
-            }
-            for i in 0..left_len {
-                if left_schema[i].datatype() != right_schema[i].datatype() {
-                    return false;
-                }
-            }
-            true
-        };
+        let mut left_schema = left_plan.output_schema();
+        let mut right_schema = right_plan.output_schema();
 
-        let left_schema = left_plan.output_schema();
-        let right_schema = right_plan.output_schema();
+        let left_len = left_schema.len();
 
-        if !fn_eq(left_schema, right_schema) {
+        if left_len != right_schema.len() {
             return Err(DatabaseError::MisMatch(
-                "the output types on the left",
-                "the output types on the right",
+                "the lens on the left",
+                "the lens on the right",
             ));
+        }
+
+        if !left_schema
+            .iter()
+            .zip(right_schema.iter())
+            .all(|(left, right)| left.datatype() == right.datatype())
+        {
+            (left_plan, right_plan) = self.bind_set_cast(left_plan, right_plan)?;
+            left_schema = left_plan.output_schema();
+            right_schema = right_plan.output_schema();
         }
 
         match op {
