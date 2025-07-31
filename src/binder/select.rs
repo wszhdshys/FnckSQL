@@ -1,7 +1,3 @@
-use std::borrow::Borrow;
-use std::collections::HashSet;
-use std::sync::Arc;
-
 use crate::{
     expression::ScalarExpression,
     planner::{
@@ -13,15 +9,21 @@ use crate::{
     },
     types::value::DataValue,
 };
+use std::borrow::Borrow;
+use std::collections::HashSet;
+use std::sync::Arc;
 
 use super::{
     lower_case_name, lower_ident, Binder, BinderContext, QueryBindStep, Source, SubQueryType,
 };
 
-use crate::catalog::{ColumnCatalog, ColumnRef, ColumnSummary, TableName};
+use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef, ColumnSummary, TableName};
 use crate::errors::DatabaseError;
 use crate::execution::dql::join::joins_nullable;
 use crate::expression::agg::AggKind;
+use crate::expression::simplify::ConstantCalculator;
+use crate::expression::visitor_mut::VisitorMut;
+use crate::expression::ScalarExpression::Constant;
 use crate::expression::{AliasType, BinaryOperator};
 use crate::planner::operator::aggregate::AggregateOperator;
 use crate::planner::operator::except::ExceptOperator;
@@ -30,6 +32,8 @@ use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::operator::union::UnionOperator;
+use crate::planner::operator::values::ValuesOperator;
+use crate::planner::operator::Operator::Values;
 use crate::planner::{Childrens, LogicalPlan, SchemaOutput};
 use crate::storage::Transaction;
 use crate::types::tuple::{Schema, SchemaRef};
@@ -59,6 +63,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                 left,
                 right,
             } => self.bind_set_operation(op, set_quantifier, left, right),
+            SetExpr::Values(values) => self.bind_temp_values(&values.rows),
             expr => {
                 return Err(DatabaseError::UnsupportedStmt(format!(
                     "query body: {:?}",
@@ -154,6 +159,58 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
         }
 
         Ok(plan)
+    }
+
+    fn bind_temp_values(
+        &mut self,
+        expr_rows: &Vec<Vec<Expr>>,
+    ) -> Result<LogicalPlan, DatabaseError> {
+        if expr_rows.is_empty() {
+            return Err(DatabaseError::ColumnsEmpty);
+        }
+
+        let values_len = expr_rows[0].len();
+        let mut column_ref = Vec::with_capacity(values_len);
+
+        let rows: Result<Vec<_>, _> = expr_rows
+            .iter()
+            .enumerate()
+            .map(|(row_index, expr_row)| {
+                if expr_row.len() != values_len {
+                    return Err(DatabaseError::ValuesLenMismatch(expr_row.len(), values_len));
+                }
+
+                let mut row = Vec::with_capacity(values_len);
+                for (col_index, expr) in expr_row.iter().enumerate() {
+                    let mut expression = self.bind_expr(expr)?;
+                    ConstantCalculator.visit(&mut expression)?;
+
+                    if row_index == 0 {
+                        column_ref.push(ColumnRef(Arc::new(ColumnCatalog::new(
+                            col_index.to_string(),
+                            false,
+                            ColumnDesc::new(expression.return_type().clone(), None, false, None)?,
+                        ))));
+                    }
+
+                    if let Constant(value) = expression {
+                        row.push(value);
+                    } else {
+                        return Err(DatabaseError::InvalidType);
+                    }
+                }
+                Ok(row)
+            })
+            .collect();
+        let rows = rows?;
+
+        Ok(LogicalPlan::new(
+            Values(ValuesOperator {
+                rows,
+                schema_ref: Arc::new(column_ref),
+            }),
+            Childrens::None,
+        ))
     }
 
     fn bind_set_cast(
@@ -357,8 +414,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                     }
                     let table_alias = Arc::new(name.value.to_lowercase());
 
-                    plan =
-                        self.bind_alias(plan, alias_column, table_alias, tables.pop().unwrap())?;
+                    plan = self.bind_alias(plan, alias_column, table_alias, tables.pop())?;
                 }
                 plan
             }
@@ -380,7 +436,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                             plan,
                             alias_column,
                             table_alias.clone().unwrap(),
-                            table_name.clone(),
+                            Some(table_name.clone()),
                         )?;
                     }
 
@@ -403,7 +459,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
         mut plan: LogicalPlan,
         alias_column: &[Ident],
         table_alias: TableName,
-        table_name: TableName,
+        table_name: Option<TableName>,
     ) -> Result<LogicalPlan, DatabaseError> {
         let input_schema = plan.output_schema();
         if !alias_column.is_empty() && alias_column.len() != input_schema.len() {
@@ -446,7 +502,9 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             );
             alias_exprs.push(alias_column_expr);
         }
-        self.context.add_table_alias(table_alias, table_name);
+        if let Some(table_name) = table_name {
+            self.context.add_table_alias(table_alias, table_name);
+        }
         self.bind_project(plan, alias_exprs)
     }
 
@@ -476,7 +534,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
         };
 
         if let Some(idents) = alias_idents {
-            plan = self.bind_alias(plan, idents, table_alias.unwrap(), table_name.clone())?;
+            plan = self.bind_alias(plan, idents, table_alias.unwrap(), Some(table_name.clone()))?;
         }
         Ok(plan)
     }
