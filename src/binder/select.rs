@@ -32,8 +32,6 @@ use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
 use crate::planner::operator::sort::{SortField, SortOperator};
 use crate::planner::operator::union::UnionOperator;
-use crate::planner::operator::values::ValuesOperator;
-use crate::planner::operator::Operator::Values;
 use crate::planner::{Childrens, LogicalPlan, SchemaOutput};
 use crate::storage::Transaction;
 use crate::types::tuple::{Schema, SchemaRef};
@@ -161,56 +159,56 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
         Ok(plan)
     }
 
-    fn bind_temp_values(
-        &mut self,
-        expr_rows: &Vec<Vec<Expr>>,
-    ) -> Result<LogicalPlan, DatabaseError> {
-        if expr_rows.is_empty() {
-            return Err(DatabaseError::ColumnsEmpty);
+    fn bind_temp_values(&mut self, expr_rows: &Vec<Vec<Expr>>) -> Result<LogicalPlan, DatabaseError> {
+        let values_len = expr_rows[0].len();
+
+        let mut inferred_types: Vec<Option<LogicalType>> = vec![None; values_len];
+        let mut rows = Vec::with_capacity(expr_rows.len());
+
+        for expr_row in expr_rows.iter() {
+            if expr_row.len() != values_len {
+                return Err(DatabaseError::ValuesLenMismatch(expr_row.len(), values_len));
+            }
+
+            let mut row = Vec::with_capacity(values_len);
+
+            for (col_index, expr) in expr_row.iter().enumerate() {
+                let mut expression = self.bind_expr(expr)?;
+                ConstantCalculator.visit(&mut expression)?;
+
+                if let Constant(value) = expression {
+                    // 2. 获取当前值的类型
+                    let value_type = value.logical_type();
+
+                    // 3. 合并类型为最宽类型
+                    inferred_types[col_index] = match &inferred_types[col_index] {
+                        Some(existing) => Some(LogicalType::max_logical_type(existing, &value_type)?),
+                        None => Some(value_type),
+                    };
+
+                    row.push(value);
+                } else {
+                    return Err(DatabaseError::ColumnsEmpty);
+                }
+            }
+
+            rows.push(row);
         }
 
-        let values_len = expr_rows[0].len();
-        let mut column_ref = Vec::with_capacity(values_len);
-
-        let rows: Result<Vec<_>, _> = expr_rows
-            .iter()
+        let column_ref: Vec<ColumnRef> = inferred_types
+            .into_iter()
             .enumerate()
-            .map(|(row_index, expr_row)| {
-                if expr_row.len() != values_len {
-                    return Err(DatabaseError::ValuesLenMismatch(expr_row.len(), values_len));
-                }
-
-                let mut row = Vec::with_capacity(values_len);
-                for (col_index, expr) in expr_row.iter().enumerate() {
-                    let mut expression = self.bind_expr(expr)?;
-                    ConstantCalculator.visit(&mut expression)?;
-
-                    if row_index == 0 {
-                        column_ref.push(ColumnRef(Arc::new(ColumnCatalog::new(
-                            col_index.to_string(),
-                            false,
-                            ColumnDesc::new(expression.return_type().clone(), None, false, None)?,
-                        ))));
-                    }
-
-                    if let Constant(value) = expression {
-                        row.push(value);
-                    } else {
-                        return Err(DatabaseError::InvalidType);
-                    }
-                }
-                Ok(row)
+            .map(|(col_index, typ)| {
+                let typ = typ.ok_or(DatabaseError::InvalidType)?;
+                Ok(ColumnRef(Arc::new(ColumnCatalog::new(
+                    col_index.to_string(),
+                    false,
+                    ColumnDesc::new(typ, None, false, None)?,
+                ))))
             })
-            .collect();
-        let rows = rows?;
+            .collect::<Result<_, DatabaseError>>()?;
 
-        Ok(LogicalPlan::new(
-            Values(ValuesOperator {
-                rows,
-                schema_ref: Arc::new(column_ref),
-            }),
-            Childrens::None,
-        ))
+        Ok(self.bind_values(rows,Arc::new(column_ref)))
     }
 
     fn bind_set_cast(
