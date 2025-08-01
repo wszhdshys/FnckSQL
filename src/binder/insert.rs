@@ -109,7 +109,11 @@ impl<T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'_, '_, T, A>
         ))
     }
 
-    pub(crate) fn bind_values(&mut self, rows: Vec<Vec<DataValue>>, schema_ref: SchemaRef) -> LogicalPlan {
+    pub(crate) fn bind_values(
+        &mut self,
+        rows: Vec<Vec<DataValue>>,
+        schema_ref: SchemaRef,
+    ) -> LogicalPlan {
         LogicalPlan::new(
             Operator::Values(ValuesOperator { rows, schema_ref }),
             Childrens::None,

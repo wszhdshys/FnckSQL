@@ -159,7 +159,10 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
         Ok(plan)
     }
 
-    fn bind_temp_values(&mut self, expr_rows: &Vec<Vec<Expr>>) -> Result<LogicalPlan, DatabaseError> {
+    fn bind_temp_values(
+        &mut self,
+        expr_rows: &Vec<Vec<Expr>>,
+    ) -> Result<LogicalPlan, DatabaseError> {
         let values_len = expr_rows[0].len();
 
         let mut inferred_types: Vec<Option<LogicalType>> = vec![None; values_len];
@@ -182,7 +185,9 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
 
                     // 3. 合并类型为最宽类型
                     inferred_types[col_index] = match &inferred_types[col_index] {
-                        Some(existing) => Some(LogicalType::max_logical_type(existing, &value_type)?),
+                        Some(existing) => {
+                            Some(LogicalType::max_logical_type(existing, &value_type)?)
+                        }
                         None => Some(value_type),
                     };
 
@@ -208,7 +213,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             })
             .collect::<Result<_, DatabaseError>>()?;
 
-        Ok(self.bind_values(rows,Arc::new(column_ref)))
+        Ok(self.bind_values(rows, Arc::new(column_ref)))
     }
 
     fn bind_set_cast(
