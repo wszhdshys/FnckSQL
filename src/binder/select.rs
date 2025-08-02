@@ -180,10 +180,8 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                 ConstantCalculator.visit(&mut expression)?;
 
                 if let Constant(value) = expression {
-                    // 2. 获取当前值的类型
                     let value_type = value.logical_type();
 
-                    // 3. 合并类型为最宽类型
                     inferred_types[col_index] = match &inferred_types[col_index] {
                         Some(existing) => {
                             Some(LogicalType::max_logical_type(existing, &value_type)?)
@@ -200,20 +198,22 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             rows.push(row);
         }
 
-        let column_ref: Vec<ColumnRef> = inferred_types
+        let column_refs: Vec<ColumnRef> = inferred_types
             .into_iter()
             .enumerate()
             .map(|(col_index, typ)| {
                 let typ = typ.ok_or(DatabaseError::InvalidType)?;
-                Ok(ColumnRef(Arc::new(ColumnCatalog::new(
+                let mut column_ref = ColumnCatalog::new(
                     col_index.to_string(),
                     false,
                     ColumnDesc::new(typ, None, false, None)?,
-                ))))
+                );
+                column_ref.set_ref_table(self.context.temp_table(), ColumnId::default(), true);
+                Ok(ColumnRef(Arc::new(column_ref)))
             })
             .collect::<Result<_, DatabaseError>>()?;
 
-        Ok(self.bind_values(rows, Arc::new(column_ref)))
+        Ok(self.bind_values(rows, Arc::new(column_refs)))
     }
 
     fn bind_set_cast(
