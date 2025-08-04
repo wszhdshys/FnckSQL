@@ -76,6 +76,11 @@ impl ExpressionRemapper {
                     TryReference::new(output_exprs).visit(&mut sort_field.expr)?;
                 }
             }
+            Operator::TopK(op) => {
+                for sort_field in op.sort_fields.iter_mut() {
+                    TryReference::new(output_exprs).visit(&mut sort_field.expr)?;
+                }
+            }
             Operator::FunctionScan(op) => {
                 for expr in op.table_function.args.iter_mut() {
                     TryReference::new(output_exprs).visit(expr)?;
@@ -182,6 +187,11 @@ impl EvaluatorBind {
                 }
             }
             Operator::Sort(op) => {
+                for sort_field in op.sort_fields.iter_mut() {
+                    BindEvaluator.visit(&mut sort_field.expr)?;
+                }
+            }
+            Operator::TopK(op) => {
                 for sort_field in op.sort_fields.iter_mut() {
                     BindEvaluator.visit(&mut sort_field.expr)?;
                 }

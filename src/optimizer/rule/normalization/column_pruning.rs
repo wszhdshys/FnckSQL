@@ -111,7 +111,8 @@ impl ColumnPruning {
             | Operator::Join(_)
             | Operator::Filter(_)
             | Operator::Union(_)
-            | Operator::Except(_) => {
+            | Operator::Except(_)
+            | Operator::TopK(_) => {
                 let temp_columns = operator.referenced_columns(false);
                 // why?
                 let mut column_references = column_references;

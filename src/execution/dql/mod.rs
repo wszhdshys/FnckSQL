@@ -13,6 +13,7 @@ pub(crate) mod seq_scan;
 pub(crate) mod show_table;
 pub(crate) mod show_view;
 pub(crate) mod sort;
+pub(crate) mod top_k;
 pub(crate) mod union;
 pub(crate) mod values;
 

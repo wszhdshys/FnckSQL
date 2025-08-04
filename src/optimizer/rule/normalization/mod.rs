@@ -10,6 +10,7 @@ use crate::optimizer::rule::normalization::combine_operators::{
 use crate::optimizer::rule::normalization::compilation_in_advance::{
     EvaluatorBind, ExpressionRemapper,
 };
+
 use crate::optimizer::rule::normalization::pushdown_limit::{
     LimitProjectTranspose, PushLimitIntoScan, PushLimitThroughJoin,
 };
@@ -17,13 +18,14 @@ use crate::optimizer::rule::normalization::pushdown_predicates::PushPredicateInt
 use crate::optimizer::rule::normalization::pushdown_predicates::PushPredicateThroughJoin;
 use crate::optimizer::rule::normalization::simplification::ConstantCalculation;
 use crate::optimizer::rule::normalization::simplification::SimplifyFilter;
-
+use crate::optimizer::rule::normalization::top_k::TopK;
 mod column_pruning;
 mod combine_operators;
 mod compilation_in_advance;
 mod pushdown_limit;
 mod pushdown_predicates;
 mod simplification;
+mod top_k;
 
 #[derive(Debug, Copy, Clone)]
 pub enum NormalizationRuleImpl {
@@ -46,6 +48,7 @@ pub enum NormalizationRuleImpl {
     // CompilationInAdvance
     ExpressionRemapper,
     EvaluatorBind,
+    TopK,
 }
 
 impl MatchPattern for NormalizationRuleImpl {
@@ -64,6 +67,7 @@ impl MatchPattern for NormalizationRuleImpl {
             NormalizationRuleImpl::ConstantCalculation => ConstantCalculation.pattern(),
             NormalizationRuleImpl::ExpressionRemapper => ExpressionRemapper.pattern(),
             NormalizationRuleImpl::EvaluatorBind => EvaluatorBind.pattern(),
+            NormalizationRuleImpl::TopK => TopK.pattern(),
         }
     }
 }
@@ -94,6 +98,7 @@ impl NormalizationRule for NormalizationRuleImpl {
             NormalizationRuleImpl::ConstantCalculation => ConstantCalculation.apply(node_id, graph),
             NormalizationRuleImpl::ExpressionRemapper => ExpressionRemapper.apply(node_id, graph),
             NormalizationRuleImpl::EvaluatorBind => EvaluatorBind.apply(node_id, graph),
+            NormalizationRuleImpl::TopK => TopK.apply(node_id, graph),
         }
     }
 }
