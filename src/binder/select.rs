@@ -417,7 +417,12 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                     }
                     let table_alias = Arc::new(name.value.to_lowercase());
 
-                    plan = self.bind_alias(plan, alias_column, table_alias, tables.pop())?;
+                    plan = self.bind_alias(
+                        plan,
+                        alias_column,
+                        table_alias,
+                        tables.pop().unwrap_or(Arc::new("_temp_table_".to_string())),
+                    )?;
                 }
                 plan
             }
@@ -439,7 +444,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                             plan,
                             alias_column,
                             table_alias.clone().unwrap(),
-                            Some(table_name.clone()),
+                            table_name.clone(),
                         )?;
                     }
 
@@ -462,7 +467,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
         mut plan: LogicalPlan,
         alias_column: &[Ident],
         table_alias: TableName,
-        table_name: Option<TableName>,
+        table_name: TableName,
     ) -> Result<LogicalPlan, DatabaseError> {
         let input_schema = plan.output_schema();
         if !alias_column.is_empty() && alias_column.len() != input_schema.len() {
@@ -505,9 +510,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             );
             alias_exprs.push(alias_column_expr);
         }
-        if let Some(table_name) = table_name {
-            self.context.add_table_alias(table_alias, table_name);
-        }
+        self.context.add_table_alias(table_alias, table_name);
         self.bind_project(plan, alias_exprs)
     }
 
@@ -537,7 +540,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
         };
 
         if let Some(idents) = alias_idents {
-            plan = self.bind_alias(plan, idents, table_alias.unwrap(), Some(table_name.clone()))?;
+            plan = self.bind_alias(plan, idents, table_alias.unwrap(), table_name.clone())?;
         }
         Ok(plan)
     }
