@@ -198,6 +198,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
             rows.push(row);
         }
 
+        let value_name = self.context.temp_table();
         let column_refs: Vec<ColumnRef> = inferred_types
             .into_iter()
             .enumerate()
@@ -208,7 +209,7 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                     false,
                     ColumnDesc::new(typ, None, false, None)?,
                 );
-                column_ref.set_ref_table(self.context.temp_table(), ColumnId::default(), true);
+                column_ref.set_ref_table(value_name.clone(), ColumnId::default(), true);
                 Ok(ColumnRef(Arc::new(column_ref)))
             })
             .collect::<Result<_, DatabaseError>>()?;
@@ -416,13 +417,9 @@ impl<'a: 'b, 'b, T: Transaction, A: AsRef<[(&'static str, DataValue)]>> Binder<'
                         ));
                     }
                     let table_alias = Arc::new(name.value.to_lowercase());
+                    let table = tables.pop().unwrap_or_else(|| self.context.temp_table());
 
-                    plan = self.bind_alias(
-                        plan,
-                        alias_column,
-                        table_alias,
-                        tables.pop().unwrap_or(Arc::new("_temp_table_".to_string())),
-                    )?;
+                    plan = self.bind_alias(plan, alias_column, table_alias, table)?;
                 }
                 plan
             }
