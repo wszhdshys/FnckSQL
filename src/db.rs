@@ -254,6 +254,7 @@ impl<S: Storage> State<S> {
                 ImplementationRuleImpl::IndexScan,
                 ImplementationRuleImpl::FunctionScan,
                 ImplementationRuleImpl::Sort,
+                ImplementationRuleImpl::TopK,
                 ImplementationRuleImpl::Values,
                 // DML
                 ImplementationRuleImpl::Analyze,

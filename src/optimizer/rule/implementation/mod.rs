@@ -32,6 +32,7 @@ use crate::optimizer::rule::implementation::dql::sort::SortImplementation;
 use crate::optimizer::rule::implementation::dql::table_scan::{
     IndexScanImplementation, SeqScanImplementation,
 };
+use crate::optimizer::rule::implementation::dql::top_k::TopKImplementation;
 use crate::optimizer::rule::implementation::dql::values::ValuesImplementation;
 use crate::planner::operator::Operator;
 use crate::storage::Transaction;
@@ -50,6 +51,7 @@ pub enum ImplementationRuleImpl {
     FunctionScan,
     IndexScan,
     Sort,
+    TopK,
     Values,
     // DML
     Analyze,
@@ -80,6 +82,7 @@ impl MatchPattern for ImplementationRuleImpl {
             ImplementationRuleImpl::IndexScan => IndexScanImplementation.pattern(),
             ImplementationRuleImpl::FunctionScan => FunctionScanImplementation.pattern(),
             ImplementationRuleImpl::Sort => SortImplementation.pattern(),
+            ImplementationRuleImpl::TopK => TopKImplementation.pattern(),
             ImplementationRuleImpl::Values => ValuesImplementation.pattern(),
             ImplementationRuleImpl::CopyFromFile => CopyFromFileImplementation.pattern(),
             ImplementationRuleImpl::CopyToFile => CopyToFileImplementation.pattern(),
@@ -136,6 +139,9 @@ impl<T: Transaction> ImplementationRule<T> for ImplementationRuleImpl {
             }
             ImplementationRuleImpl::Sort => {
                 SortImplementation.to_expression(operator, loader, group_expr)?
+            }
+            ImplementationRuleImpl::TopK => {
+                TopKImplementation.to_expression(operator, loader, group_expr)?
             }
             ImplementationRuleImpl::Values => {
                 ValuesImplementation.to_expression(operator, loader, group_expr)?

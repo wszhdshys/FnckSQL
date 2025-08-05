@@ -33,7 +33,7 @@ impl TopKOperator {
 
 impl fmt::Display for TopKOperator {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Top {},  ", self.limit)?;
+        write!(f, "Top {}, ", self.limit)?;
 
         if let Some(offset) = self.offset {
             write!(f, "Offset {}, ", offset)?;

@@ -59,17 +59,15 @@ fn top_sort<'a>(
 }
 
 fn final_sort(
-    indices: BinaryHeap<(Vec<u8>, usize)>,
+    mut indices: BinaryHeap<(Vec<u8>, usize)>,
     mut tuples: HashMap<usize, Tuple>,
 ) -> Vec<Tuple> {
-    let mut topk: Vec<(Vec<u8>, usize)> = indices.into_iter().map(|(key, i)| (key, i)).collect();
-    topk.sort_by(|(k1, i1), (k2, i2)| k2.cmp(k1).then_with(|| i1.cmp(i2).reverse()));
-    topk.reverse();
-    Vec::from(
-        topk.into_iter()
-            .map(|(_, index)| tuples.remove(&index).unwrap())
-            .collect::<Vec<_>>(),
-    )
+    let mut result = Vec::with_capacity(indices.len());
+    while let Some((_, index)) = indices.pop() {
+        result.push(tuples.remove(&index).unwrap());
+    }
+    result.reverse();
+    result
 }
 
 pub struct TopK {
@@ -153,5 +151,626 @@ impl<'a, T: Transaction + 'a> ReadExecutor<'a, T> for TopK {
                 }
             },
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::catalog::{ColumnCatalog, ColumnDesc, ColumnRef};
+    use crate::errors::DatabaseError;
+    use crate::execution::dql::top_k::{final_sort, top_sort};
+    use crate::expression::ScalarExpression;
+    use crate::planner::operator::sort::SortField;
+    use crate::types::tuple::Tuple;
+    use crate::types::value::DataValue;
+    use crate::types::LogicalType;
+    use ahash::{HashMap, HashMapExt};
+    use bumpalo::Bump;
+    use std::collections::BinaryHeap;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_top_k_sort() -> Result<(), DatabaseError> {
+        let fn_sort_fields = |asc: bool, nulls_first: bool| {
+            vec![SortField {
+                expr: ScalarExpression::Reference {
+                    expr: Box::new(ScalarExpression::Empty),
+                    pos: 0,
+                },
+                asc,
+                nulls_first,
+            }]
+        };
+        let schema = Arc::new(vec![ColumnRef::from(ColumnCatalog::new(
+            "c1".to_string(),
+            true,
+            ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
+        ))]);
+
+        let arena = Bump::new();
+
+        let fn_asc_and_nulls_last_eq = |mut iter: Box<dyn Iterator<Item = Tuple>>| {
+            if let Some(tuple) = iter.next() {
+                assert_eq!(tuple.values, vec![DataValue::Int32(0)])
+            } else {
+                unreachable!()
+            }
+            if let Some(tuple) = iter.next() {
+                assert_eq!(tuple.values, vec![DataValue::Int32(1)])
+            } else {
+                unreachable!()
+            }
+        };
+        let fn_desc_and_nulls_last_eq = |mut iter: Box<dyn Iterator<Item = Tuple>>| {
+            if let Some(tuple) = iter.next() {
+                assert_eq!(tuple.values, vec![DataValue::Int32(1)])
+            } else {
+                unreachable!()
+            }
+            if let Some(tuple) = iter.next() {
+                assert_eq!(tuple.values, vec![DataValue::Int32(0)])
+            } else {
+                unreachable!()
+            }
+        };
+        let fn_asc_and_nulls_first_eq = |mut iter: Box<dyn Iterator<Item = Tuple>>| {
+            if let Some(tuple) = iter.next() {
+                assert_eq!(tuple.values, vec![DataValue::Null])
+            } else {
+                unreachable!()
+            }
+            if let Some(tuple) = iter.next() {
+                assert_eq!(tuple.values, vec![DataValue::Int32(0)])
+            } else {
+                unreachable!()
+            }
+        };
+        let fn_desc_and_nulls_first_eq = |mut iter: Box<dyn Iterator<Item = Tuple>>| {
+            if let Some(tuple) = iter.next() {
+                assert_eq!(tuple.values, vec![DataValue::Null])
+            } else {
+                unreachable!()
+            }
+            if let Some(tuple) = iter.next() {
+                assert_eq!(tuple.values, vec![DataValue::Int32(1)])
+            } else {
+                unreachable!()
+            }
+        };
+
+        let mut indices: BinaryHeap<(Vec<u8>, usize)> = BinaryHeap::with_capacity(2);
+        let mut tuples: HashMap<usize, Tuple> = HashMap::with_capacity(2);
+        top_sort(
+            &arena,
+            &schema,
+            &*fn_sort_fields(true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Null]),
+            2,
+            0,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &*fn_sort_fields(true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(0)]),
+            2,
+            1,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &*fn_sort_fields(true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(1)]),
+            2,
+            2,
+        )?;
+        fn_asc_and_nulls_first_eq(Box::new(final_sort(indices, tuples).into_iter()));
+
+        let mut indices: BinaryHeap<(Vec<u8>, usize)> = BinaryHeap::with_capacity(2);
+        let mut tuples: HashMap<usize, Tuple> = HashMap::with_capacity(2);
+        top_sort(
+            &arena,
+            &schema,
+            &*fn_sort_fields(true, false),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Null]),
+            2,
+            0,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &*fn_sort_fields(true, false),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(0)]),
+            2,
+            1,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &*fn_sort_fields(true, false),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(1)]),
+            2,
+            2,
+        )?;
+        fn_asc_and_nulls_last_eq(Box::new(final_sort(indices, tuples).into_iter()));
+
+        let mut indices: BinaryHeap<(Vec<u8>, usize)> = BinaryHeap::with_capacity(2);
+        let mut tuples: HashMap<usize, Tuple> = HashMap::with_capacity(2);
+        top_sort(
+            &arena,
+            &schema,
+            &*fn_sort_fields(false, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Null]),
+            2,
+            0,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &*fn_sort_fields(false, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(0)]),
+            2,
+            1,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &*fn_sort_fields(false, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(1)]),
+            2,
+            2,
+        )?;
+        fn_desc_and_nulls_first_eq(Box::new(final_sort(indices, tuples).into_iter()));
+
+        let mut indices: BinaryHeap<(Vec<u8>, usize)> = BinaryHeap::with_capacity(2);
+        let mut tuples: HashMap<usize, Tuple> = HashMap::with_capacity(2);
+        top_sort(
+            &arena,
+            &schema,
+            &*fn_sort_fields(false, false),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Null]),
+            2,
+            0,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &*fn_sort_fields(false, false),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(0)]),
+            2,
+            1,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &*fn_sort_fields(false, false),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(1)]),
+            2,
+            2,
+        )?;
+        fn_desc_and_nulls_last_eq(Box::new(final_sort(indices, tuples).into_iter()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_top_k_sort_mix_values() -> Result<(), DatabaseError> {
+        let fn_sort_fields =
+            |asc_1: bool, nulls_first_1: bool, asc_2: bool, nulls_first_2: bool| {
+                vec![
+                    SortField {
+                        expr: ScalarExpression::Reference {
+                            expr: Box::new(ScalarExpression::Empty),
+                            pos: 0,
+                        },
+                        asc: asc_1,
+                        nulls_first: nulls_first_1,
+                    },
+                    SortField {
+                        expr: ScalarExpression::Reference {
+                            expr: Box::new(ScalarExpression::Empty),
+                            pos: 0,
+                        },
+                        asc: asc_2,
+                        nulls_first: nulls_first_2,
+                    },
+                ]
+            };
+        let schema = Arc::new(vec![
+            ColumnRef::from(ColumnCatalog::new(
+                "c1".to_string(),
+                true,
+                ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
+            )),
+            ColumnRef::from(ColumnCatalog::new(
+                "c2".to_string(),
+                true,
+                ColumnDesc::new(LogicalType::Integer, None, false, None).unwrap(),
+            )),
+        ]);
+        let arena = Bump::new();
+
+        let fn_asc_1_and_nulls_first_1_and_asc_2_and_nulls_first_2_eq =
+            |mut iter: Box<dyn Iterator<Item = Tuple>>| {
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Null, DataValue::Null])
+                } else {
+                    unreachable!()
+                }
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Null, DataValue::Int32(0)])
+                } else {
+                    unreachable!()
+                }
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Int32(0), DataValue::Null])
+                } else {
+                    unreachable!()
+                }
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Int32(0), DataValue::Int32(0)])
+                } else {
+                    unreachable!()
+                }
+            };
+        let fn_asc_1_and_nulls_last_1_and_asc_2_and_nulls_first_2_eq =
+            |mut iter: Box<dyn Iterator<Item = Tuple>>| {
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Int32(0), DataValue::Null])
+                } else {
+                    unreachable!()
+                }
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Int32(0), DataValue::Int32(0)])
+                } else {
+                    unreachable!()
+                }
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Int32(1), DataValue::Null])
+                } else {
+                    unreachable!()
+                }
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Int32(1), DataValue::Int32(0)])
+                } else {
+                    unreachable!()
+                }
+            };
+        let fn_desc_1_and_nulls_first_1_and_asc_2_and_nulls_first_2_eq =
+            |mut iter: Box<dyn Iterator<Item = Tuple>>| {
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Null, DataValue::Null])
+                } else {
+                    unreachable!()
+                }
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Null, DataValue::Int32(0)])
+                } else {
+                    unreachable!()
+                }
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Int32(1), DataValue::Null])
+                } else {
+                    unreachable!()
+                }
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Int32(1), DataValue::Int32(0)])
+                } else {
+                    unreachable!()
+                }
+            };
+        let fn_desc_1_and_nulls_last_1_and_asc_2_and_nulls_first_2_eq =
+            |mut iter: Box<dyn Iterator<Item = Tuple>>| {
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Int32(1), DataValue::Null])
+                } else {
+                    unreachable!()
+                }
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Int32(1), DataValue::Int32(0)])
+                } else {
+                    unreachable!()
+                }
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Int32(0), DataValue::Null])
+                } else {
+                    unreachable!()
+                }
+                if let Some(tuple) = iter.next() {
+                    assert_eq!(tuple.values, vec![DataValue::Int32(0), DataValue::Int32(0)])
+                } else {
+                    unreachable!()
+                }
+            };
+
+        let mut indices: BinaryHeap<(Vec<u8>, usize)> = BinaryHeap::with_capacity(4);
+        let mut tuples: HashMap<usize, Tuple> = HashMap::with_capacity(4);
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(true, true, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Null, DataValue::Null]),
+            4,
+            0,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(true, true, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(0), DataValue::Null]),
+            4,
+            1,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(true, true, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(1), DataValue::Null]),
+            4,
+            2,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(true, true, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Null, DataValue::Int32(0)]),
+            4,
+            3,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(true, true, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(0), DataValue::Int32(0)]),
+            4,
+            5,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(true, true, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(1), DataValue::Int32(0)]),
+            4,
+            6,
+        )?;
+        fn_asc_1_and_nulls_first_1_and_asc_2_and_nulls_first_2_eq(Box::new(
+            final_sort(indices, tuples).into_iter(),
+        ));
+
+        let mut indices: BinaryHeap<(Vec<u8>, usize)> = BinaryHeap::with_capacity(4);
+        let mut tuples: HashMap<usize, Tuple> = HashMap::with_capacity(4);
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(true, false, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Null, DataValue::Null]),
+            4,
+            0,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(true, false, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(0), DataValue::Null]),
+            4,
+            1,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(true, false, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(1), DataValue::Null]),
+            4,
+            2,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(true, false, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Null, DataValue::Int32(0)]),
+            4,
+            3,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(true, false, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(0), DataValue::Int32(0)]),
+            4,
+            5,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(true, false, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(1), DataValue::Int32(0)]),
+            4,
+            6,
+        )?;
+        fn_asc_1_and_nulls_last_1_and_asc_2_and_nulls_first_2_eq(Box::new(
+            final_sort(indices, tuples).into_iter(),
+        ));
+
+        let mut indices: BinaryHeap<(Vec<u8>, usize)> = BinaryHeap::with_capacity(4);
+        let mut tuples: HashMap<usize, Tuple> = HashMap::with_capacity(4);
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(false, true, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Null, DataValue::Null]),
+            4,
+            0,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(false, true, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(0), DataValue::Null]),
+            4,
+            1,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(false, true, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(1), DataValue::Null]),
+            4,
+            2,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(false, true, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Null, DataValue::Int32(0)]),
+            4,
+            3,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(false, true, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(0), DataValue::Int32(0)]),
+            4,
+            5,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(false, true, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(1), DataValue::Int32(0)]),
+            4,
+            6,
+        )?;
+        fn_desc_1_and_nulls_first_1_and_asc_2_and_nulls_first_2_eq(Box::new(
+            final_sort(indices, tuples).into_iter(),
+        ));
+
+        let mut indices: BinaryHeap<(Vec<u8>, usize)> = BinaryHeap::with_capacity(4);
+        let mut tuples: HashMap<usize, Tuple> = HashMap::with_capacity(4);
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(false, false, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Null, DataValue::Null]),
+            4,
+            0,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(false, false, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(0), DataValue::Null]),
+            4,
+            1,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(false, false, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(1), DataValue::Null]),
+            4,
+            2,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(false, false, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Null, DataValue::Int32(0)]),
+            4,
+            3,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(false, false, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(0), DataValue::Int32(0)]),
+            4,
+            5,
+        )?;
+        top_sort(
+            &arena,
+            &schema,
+            &fn_sort_fields(false, false, true, true),
+            &mut indices,
+            &mut tuples,
+            Tuple::new(None, vec![DataValue::Int32(1), DataValue::Int32(0)]),
+            4,
+            6,
+        )?;
+        fn_desc_1_and_nulls_last_1_and_asc_2_and_nulls_first_2_eq(Box::new(
+            final_sort(indices, tuples).into_iter(),
+        ));
+
+        Ok(())
     }
 }
