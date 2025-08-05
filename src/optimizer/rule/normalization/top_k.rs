@@ -26,21 +26,21 @@ impl MatchPattern for TopK {
 impl NormalizationRule for TopK {
     fn apply(&self, node_id: HepNodeId, graph: &mut HepGraph) -> Result<(), DatabaseError> {
         if let Operator::Limit(op) = graph.operator(node_id) {
-            if let Some(child_id) = graph.eldest_child_at(node_id) {
-                if let Operator::Sort(child_op) = graph.operator(child_id) {
+            if let Some(limit) = op.limit {
+                let sort_id = graph.eldest_child_at(node_id).unwrap();
+                if let Operator::Sort(sort_op) = graph.operator(sort_id) {
                     graph.replace_node(
                         node_id,
                         Operator::TopK(TopKOperator {
-                            sort_fields: child_op.sort_fields.clone(),
-                            limit: op.limit,
+                            sort_fields: sort_op.sort_fields.clone(),
+                            limit,
                             offset: op.offset,
                         }),
                     );
-                    graph.remove_node(child_id, false);
+                    graph.remove_node(sort_id, false);
                 }
             }
         }
-
         Ok(())
     }
 }

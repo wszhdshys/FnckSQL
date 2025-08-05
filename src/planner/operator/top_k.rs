@@ -9,14 +9,14 @@ use std::fmt::Formatter;
 #[derive(Debug, PartialEq, Eq, Clone, Hash, ReferenceSerialization)]
 pub struct TopKOperator {
     pub sort_fields: Vec<SortField>,
-    pub limit: Option<usize>,
+    pub limit: usize,
     pub offset: Option<usize>,
 }
 
 impl TopKOperator {
     pub fn build(
         sort_fields: Vec<SortField>,
-        limit: Option<usize>,
+        limit: usize,
         offset: Option<usize>,
         children: LogicalPlan,
     ) -> LogicalPlan {
@@ -33,8 +33,10 @@ impl TopKOperator {
 
 impl fmt::Display for TopKOperator {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        if let Some(limit) = self.limit {
-            write!(f, "Top {}, ", limit)?;
+        write!(f, "Top {},  ", self.limit)?;
+
+        if let Some(offset) = self.offset {
+            write!(f, "Offset {}, ", offset)?;
         }
 
         let sort_fields = self
