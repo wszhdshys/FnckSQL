@@ -344,14 +344,14 @@ impl ScalarExpression {
 
     pub fn referenced_columns(&self, only_column_ref: bool) -> Vec<ColumnRef> {
         struct ColumnRefCollector(Vec<ColumnRef>);
-        impl<'a> Visitor<'a> for ColumnRefCollector {
+        impl Visitor<'_> for ColumnRefCollector {
             fn visit_column_ref(&mut self, col: &ColumnRef) -> Result<(), DatabaseError> {
                 self.0.push(col.clone());
                 Ok(())
             }
         }
         struct OutputColumnCollector(Vec<ColumnRef>);
-        impl<'a> Visitor<'a> for OutputColumnCollector {
+        impl Visitor<'_> for OutputColumnCollector {
             fn visit(&mut self, expr: &ScalarExpression) -> Result<(), DatabaseError> {
                 self.0.push(expr.output_column());
                 walk_expr(self, expr)
@@ -372,7 +372,7 @@ impl ScalarExpression {
         struct TableRefChecker {
             found: bool,
         }
-        impl<'a> Visitor<'a> for TableRefChecker {
+        impl Visitor<'_> for TableRefChecker {
             fn visit_column_ref(&mut self, col: &ColumnRef) -> Result<(), DatabaseError> {
                 if col.table_name().is_some() && col.id().is_some() {
                     self.found = true;

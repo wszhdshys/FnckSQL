@@ -494,7 +494,7 @@ mod test {
                     SortField {
                         expr: ScalarExpression::Reference {
                             expr: Box::new(ScalarExpression::Empty),
-                            pos: 0,
+                            pos: 1,
                         },
                         asc: asc_2,
                         nulls_first: nulls_first_2,
