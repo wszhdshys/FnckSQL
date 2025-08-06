@@ -48,6 +48,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Delete {
                 .ok_or(DatabaseError::TableNotFound));
                 let mut indexes: HashMap<IndexId, Value> = HashMap::new();
 
+                let mut deleted_count = 0;
                 let mut coroutine = build_read(input, cache, transaction);
 
                 while let CoroutineState::Yielded(tuple) = Pin::new(&mut coroutine).resume(()) {
@@ -99,10 +100,11 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Delete {
                         }
 
                         throw!(unsafe { &mut (*transaction) }.remove_tuple(&table_name, tuple_id));
+                        deleted_count += 1;
                     }
                 }
                 drop(coroutine);
-                yield Ok(TupleBuilder::build_result("1".to_string()));
+                yield Ok(TupleBuilder::build_result(deleted_count.to_string()));
             },
         )
     }

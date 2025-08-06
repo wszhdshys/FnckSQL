@@ -63,6 +63,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Update {
 
                 let input_schema = input.output_schema().clone();
                 let types = types(&input_schema);
+                let mut updated_count = 0;
 
                 if let Some(table_catalog) =
                     throw!(unsafe { &mut (*transaction) }.table(cache.0, table_name.clone()))
@@ -135,10 +136,11 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Update {
                             &types,
                             is_overwrite
                         ));
+                        updated_count += 1;
                     }
                     drop(coroutine);
                 }
-                yield Ok(TupleBuilder::build_result("1".to_string()));
+                yield Ok(TupleBuilder::build_result(updated_count.to_string()));
             },
         )
     }

@@ -270,7 +270,7 @@ fn encode_tuples<'a>(schema: &SchemaRef, tuples: Vec<Tuple>) -> PgWireResult<Que
                 }
                 LogicalType::Date => encoder.encode_field(&value.date()),
                 LogicalType::DateTime => encoder.encode_field(&value.datetime()),
-                LogicalType::Time => encoder.encode_field(&value.time()),
+                LogicalType::Time(_) => encoder.encode_field(&value.time()),
                 LogicalType::Decimal(_, _) => {
                     encoder.encode_field(&value.decimal().map(|decimal| decimal.to_string()))
                 }
@@ -297,7 +297,7 @@ fn into_pg_type(data_type: &LogicalType) -> PgWireResult<Type> {
         LogicalType::Varchar(..) => Type::VARCHAR,
         LogicalType::Date | LogicalType::DateTime => Type::DATE,
         LogicalType::Char(..) => Type::CHAR,
-        LogicalType::Time => Type::TIME,
+        LogicalType::Time(_) => Type::TIME,
         LogicalType::Decimal(_, _) => Type::NUMERIC,
         _ => {
             return Err(PgWireError::UserError(Box::new(ErrorInfo::new(

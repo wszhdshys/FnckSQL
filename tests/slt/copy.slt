@@ -5,7 +5,7 @@ create table test_copy (a int primary key, b float, c varchar(10))
 query I
 COPY test_copy FROM 'tests/data/copy.tbl' ( DELIMITER '|' );
 ----
-import 2 rows
+2
 
 query I
 SELECT * FROM test_copy

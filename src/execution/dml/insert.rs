@@ -88,6 +88,7 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                     throw!(Err(DatabaseError::NotNull))
                 }
 
+                let mut inserted_count = 0;
                 if let Some(table_catalog) =
                     throw!(unsafe { &mut (*transaction) }.table(cache.0, table_name.clone()))
                         .cloned()
@@ -149,10 +150,11 @@ impl<'a, T: Transaction + 'a> WriteExecutor<'a, T> for Insert {
                             &types,
                             is_overwrite
                         ));
+                        inserted_count += 1;
                     }
                     drop(coroutine);
                 }
-                yield Ok(TupleBuilder::build_result("1".to_string()));
+                yield Ok(TupleBuilder::build_result(inserted_count.to_string()));
             },
         )
     }
