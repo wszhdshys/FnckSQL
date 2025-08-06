@@ -36,6 +36,7 @@ use crate::execution::dql::seq_scan::SeqScan;
 use crate::execution::dql::show_table::ShowTables;
 use crate::execution::dql::show_view::ShowViews;
 use crate::execution::dql::sort::Sort;
+use crate::execution::dql::top_k::TopK;
 use crate::execution::dql::union::Union;
 use crate::execution::dql::values::Values;
 use crate::planner::operator::join::JoinCondition;
@@ -132,6 +133,11 @@ pub fn build_read<'a, T: Transaction + 'a>(
             let input = childrens.pop_only();
 
             Limit::from((op, input)).execute(cache, transaction)
+        }
+        Operator::TopK(op) => {
+            let input = childrens.pop_only();
+
+            TopK::from((op, input)).execute(cache, transaction)
         }
         Operator::Values(op) => Values::from(op).execute(cache, transaction),
         Operator::ShowTable => ShowTables.execute(cache, transaction),

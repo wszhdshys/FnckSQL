@@ -7,4 +7,5 @@ pub(crate) mod limit;
 pub(crate) mod projection;
 pub(crate) mod sort;
 pub(crate) mod table_scan;
+pub(crate) mod top_k;
 pub(crate) mod values;

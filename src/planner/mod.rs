@@ -131,7 +131,7 @@ impl LogicalPlan {
         mut childrens_iter: ChildrensIter,
     ) -> SchemaOutput {
         match operator {
-            Operator::Filter(_) | Operator::Sort(_) | Operator::Limit(_) => {
+            Operator::Filter(_) | Operator::Sort(_) | Operator::Limit(_) | Operator::TopK(_) => {
                 childrens_iter.next().unwrap().output_schema_direct()
             }
             Operator::Aggregate(op) => SchemaOutput::Schema(

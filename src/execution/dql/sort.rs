@@ -15,7 +15,7 @@ use std::pin::Pin;
 pub(crate) type BumpVec<'bump, T> = bumpalo::collections::Vec<'bump, T>;
 
 #[derive(Clone)]
-pub(crate) struct NullableVec<'a, T>(BumpVec<'a, Option<T>>);
+pub(crate) struct NullableVec<'a, T>(pub(crate) BumpVec<'a, Option<T>>);
 
 impl<'a, T> NullableVec<'a, T> {
     #[inline]
@@ -49,17 +49,31 @@ impl<'a, T> NullableVec<'a, T> {
     }
 }
 
-struct RemappingIterator<'a> {
+pub struct RemappingIterator<'a> {
     pos: usize,
     tuples: NullableVec<'a, (usize, Tuple)>,
     indices: BumpVec<'a, usize>,
+}
+
+impl RemappingIterator<'_> {
+    pub fn new<'a>(
+        pos: usize,
+        tuples: NullableVec<'a, (usize, Tuple)>,
+        indices: BumpVec<'a, usize>,
+    ) -> RemappingIterator<'a> {
+        RemappingIterator {
+            pos,
+            tuples,
+            indices,
+        }
+    }
 }
 
 impl Iterator for RemappingIterator<'_> {
     type Item = Tuple;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.pos > self.tuples.len() - 1 {
+        if self.pos > self.indices.len() - 1 {
             return None;
         }
         let (_, tuple) = self.tuples.take(self.indices[self.pos]);
@@ -147,11 +161,7 @@ impl SortBy {
                 }
                 let indices = radix_sort(sort_keys, arena);
 
-                Ok(Box::new(RemappingIterator {
-                    pos: 0,
-                    tuples,
-                    indices,
-                }))
+                Ok(Box::new(RemappingIterator::new(0, tuples, indices)))
             }
             SortBy::Fast => {
                 let fn_nulls_first = |nulls_first: bool| {
@@ -484,7 +494,7 @@ mod test {
                     SortField {
                         expr: ScalarExpression::Reference {
                             expr: Box::new(ScalarExpression::Empty),
-                            pos: 0,
+                            pos: 1,
                         },
                         asc: asc_2,
                         nulls_first: nulls_first_2,

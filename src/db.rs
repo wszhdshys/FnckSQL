@@ -228,6 +228,11 @@ impl<S: Storage> State<S> {
                 ],
             )
             .batch(
+                "TopK".to_string(),
+                HepBatchStrategy::once_topdown(),
+                vec![NormalizationRuleImpl::TopK],
+            )
+            .batch(
                 "Expression Remapper".to_string(),
                 HepBatchStrategy::once_topdown(),
                 vec![
@@ -249,6 +254,7 @@ impl<S: Storage> State<S> {
                 ImplementationRuleImpl::IndexScan,
                 ImplementationRuleImpl::FunctionScan,
                 ImplementationRuleImpl::Sort,
+                ImplementationRuleImpl::TopK,
                 ImplementationRuleImpl::Values,
                 // DML
                 ImplementationRuleImpl::Analyze,

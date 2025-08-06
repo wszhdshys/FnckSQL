@@ -20,6 +20,7 @@ pub mod limit;
 pub mod project;
 pub mod sort;
 pub mod table_scan;
+pub mod top_k;
 pub mod truncate;
 pub mod union;
 pub mod update;
@@ -48,6 +49,7 @@ use crate::planner::operator::except::ExceptOperator;
 use crate::planner::operator::function_scan::FunctionScanOperator;
 use crate::planner::operator::insert::InsertOperator;
 use crate::planner::operator::join::JoinCondition;
+use crate::planner::operator::top_k::TopKOperator;
 use crate::planner::operator::truncate::TruncateOperator;
 use crate::planner::operator::union::UnionOperator;
 use crate::planner::operator::update::UpdateOperator;
@@ -70,6 +72,7 @@ pub enum Operator {
     FunctionScan(FunctionScanOperator),
     Sort(SortOperator),
     Limit(LimitOperator),
+    TopK(TopKOperator),
     Values(ValuesOperator),
     ShowTable,
     ShowView,
@@ -111,6 +114,7 @@ pub enum PhysicalOption {
     IndexScan(IndexInfo),
     Sort,
     Limit,
+    TopK,
     Values,
     Insert,
     Update,
@@ -145,7 +149,7 @@ impl Operator {
                     .map(|column| ScalarExpression::ColumnRef(column.clone()))
                     .collect_vec(),
             ),
-            Operator::Sort(_) | Operator::Limit(_) => None,
+            Operator::Sort(_) | Operator::Limit(_) | Operator::TopK(_) => None,
             Operator::Values(ValuesOperator { schema_ref, .. })
             | Operator::Union(UnionOperator {
                 left_schema_ref: schema_ref,
@@ -233,6 +237,12 @@ impl Operator {
                 .map(|field| &field.expr)
                 .flat_map(|expr| expr.referenced_columns(only_column_ref))
                 .collect_vec(),
+            Operator::TopK(op) => op
+                .sort_fields
+                .iter()
+                .map(|field| &field.expr)
+                .flat_map(|expr| expr.referenced_columns(only_column_ref))
+                .collect_vec(),
             Operator::Values(ValuesOperator { schema_ref, .. }) => Vec::clone(schema_ref),
             Operator::Union(UnionOperator {
                 left_schema_ref,
@@ -283,6 +293,7 @@ impl fmt::Display for Operator {
             Operator::FunctionScan(op) => write!(f, "{}", op),
             Operator::Sort(op) => write!(f, "{}", op),
             Operator::Limit(op) => write!(f, "{}", op),
+            Operator::TopK(op) => write!(f, "{}", op),
             Operator::Values(op) => write!(f, "{}", op),
             Operator::ShowTable => write!(f, "Show Tables"),
             Operator::ShowView => write!(f, "Show Views"),
@@ -324,6 +335,7 @@ impl fmt::Display for PhysicalOption {
             PhysicalOption::IndexScan(index) => write!(f, "IndexScan By {}", index),
             PhysicalOption::Sort => write!(f, "Sort"),
             PhysicalOption::Limit => write!(f, "Limit"),
+            PhysicalOption::TopK => write!(f, "TopK"),
             PhysicalOption::Values => write!(f, "Values"),
             PhysicalOption::Insert => write!(f, "Insert"),
             PhysicalOption::Update => write!(f, "Update"),
