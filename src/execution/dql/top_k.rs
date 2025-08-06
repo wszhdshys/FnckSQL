@@ -23,7 +23,10 @@ struct CmpItem<'a> {
 
 impl Ord for CmpItem<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.key.cmp(&other.key)
+        match self.key.cmp(&other.key) {
+            Ordering::Equal => Ordering::Greater,
+            order => order,
+        }
     }
 }
 
