@@ -7,7 +7,7 @@ use crate::expression::ScalarExpression;
 use crate::types::tuple::Tuple;
 use crate::types::value::DataValue;
 use crate::types::LogicalType;
-use chrono::Utc;
+use chrono::{Local, Offset, Utc};
 use serde::Deserialize;
 use serde::Serialize;
 use std::sync::Arc;
@@ -19,9 +19,7 @@ pub(crate) struct CurrentTimeStamp {
 
 impl CurrentTimeStamp {
     #[allow(unused_mut)]
-    pub(crate) fn new() -> Arc<Self> {
-        let function_name = "current_timestamp".to_lowercase();
-
+    pub(crate) fn new(function_name: String) -> Arc<Self> {
         Arc::new(Self {
             summary: FunctionSummary {
                 name: function_name,
@@ -39,7 +37,13 @@ impl ScalarFunctionImpl for CurrentTimeStamp {
         _: &[ScalarExpression],
         _: Option<(&Tuple, &[ColumnRef])>,
     ) -> Result<DataValue, DatabaseError> {
-        Ok(DataValue::Time64(Utc::now().timestamp(), 0, false))
+        if self.summary.name == "current_timestamp" {
+            Ok(DataValue::Time64(Utc::now().with_timezone(&Local::now().offset().fix()).timestamp(), 0, false))
+        } else if self.summary.name == "local_timestamp" {
+            Ok(DataValue::Time64(Utc::now().timestamp(), 0, false))
+        } else {
+            unreachable!()
+        }
     }
 
     fn monotonicity(&self) -> Option<FuncMonotonicity> {
