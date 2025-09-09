@@ -62,8 +62,10 @@ impl DataBaseBuilder {
         builder =
             builder.register_scala_function(CharLength::new("character_length".to_lowercase()));
         builder = builder.register_scala_function(CurrentDate::new());
-        builder = builder.register_scala_function(CurrentTimeStamp::new("current_timestamp".to_lowercase()));
-        builder = builder.register_scala_function(CurrentTimeStamp::new("local_timestamp".to_lowercase()));
+        builder = builder
+            .register_scala_function(CurrentTimeStamp::new("current_timestamp".to_lowercase()));
+        builder = builder
+            .register_scala_function(CurrentTimeStamp::new("local_timestamp".to_lowercase()));
         builder = builder.register_scala_function(Lower::new());
         builder = builder.register_scala_function(OctetLength::new());
         builder = builder.register_scala_function(Upper::new());

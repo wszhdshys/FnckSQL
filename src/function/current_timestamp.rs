@@ -38,7 +38,13 @@ impl ScalarFunctionImpl for CurrentTimeStamp {
         _: Option<(&Tuple, &[ColumnRef])>,
     ) -> Result<DataValue, DatabaseError> {
         if self.summary.name == "current_timestamp" {
-            Ok(DataValue::Time64(Utc::now().with_timezone(&Local::now().offset().fix()).timestamp(), 0, false))
+            Ok(DataValue::Time64(
+                Utc::now()
+                    .with_timezone(&Local::now().offset().fix())
+                    .timestamp(),
+                0,
+                false,
+            ))
         } else if self.summary.name == "local_timestamp" {
             Ok(DataValue::Time64(Utc::now().timestamp(), 0, false))
         } else {
